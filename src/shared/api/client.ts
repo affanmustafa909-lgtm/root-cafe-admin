@@ -46,7 +46,7 @@ export function errorMessage(e: unknown): string {
   if (typeof payload?.error === 'string') return payload.error;
   if (e.response?.status === 403) return 'You do not have permission for this action';
   if (!e.response) {
-    return 'Cannot reach the API server. Start the backend (port 3000) and reload this page.';
+    return `Cannot reach the API at ${apiBaseUrl()}. Confirm Vercel was redeployed after setting VITE_API_URL, and that Railway CORS allows this site.`;
   }
   return e.message || 'Something went wrong';
 }
