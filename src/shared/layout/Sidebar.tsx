@@ -16,6 +16,7 @@ import {
   CakeSlice,
   ImageIcon,
   Clock3,
+  Stamp,
   ChevronDown,
   type LucideIcon,
 } from 'lucide-react';
@@ -104,6 +105,7 @@ function SidebarPanel({
     { to: '/menu/home-banner', label: 'Home Banner', icon: ImageIcon },
     { to: '/settings/onboarding', label: 'Get Started', icon: ImageIcon },
     { to: '/settings/pickup', label: 'Pickup schedule', icon: Clock3 },
+    { to: '/settings/stamp-card', label: 'Stamp card', icon: Stamp },
   ];
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>

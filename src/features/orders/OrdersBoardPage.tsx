@@ -186,13 +186,45 @@ export function OrdersBoardPage() {
   const m = useMutation({
     mutationFn: ({ id, status }: { id: string; status: OrderStatus }) =>
       api.patch(`/admin/orders/${id}/status`, { status }),
-    onMutate: ({ id }) => setAdvancingId(id),
+    onMutate: async ({ id, status }) => {
+      setAdvancingId(id);
+      await qc.cancelQueries({ queryKey: ['orders'] });
+      const prev = qc.getQueryData<Order[]>(['orders']);
+      if (prev) {
+        qc.setQueryData<Order[]>(
+          ['orders'],
+          prev.map((o) =>
+            o.id === id
+              ? {
+                  ...o,
+                  status,
+                  ...(status === 'COMPLETED'
+                    ? { paymentStatus: 'PAID' as const }
+                    : {}),
+                }
+              : o,
+          ),
+        );
+      }
+      return { prev };
+    },
     onSuccess: () => {
       toast('Order updated');
+    },
+    onError: (e, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['orders'], ctx.prev);
+      const msg = errorMessage(e);
+      // Stale UI / double-click after success — refresh quietly.
+      if (/invalid status transition/i.test(msg)) {
+        refresh();
+        return;
+      }
+      toast(msg, 'error');
+    },
+    onSettled: () => {
+      setAdvancingId(null);
       refresh();
     },
-    onError: (e) => toast(errorMessage(e), 'error'),
-    onSettled: () => setAdvancingId(null),
   });
 
   const filtered = useMemo(() => {
@@ -370,7 +402,7 @@ export function OrdersBoardPage() {
                         action={action}
                         busy={advancingId === o.id}
                         onAdvance={
-                          action
+                          action && !advancingId
                             ? () =>
                                 m.mutate({
                                   id: o.id,

@@ -65,7 +65,15 @@ export function OrderDetailPage() {
       void qc.invalidateQueries({ queryKey: ['order', id] });
       void qc.invalidateQueries({ queryKey: ['orders'] });
     },
-    onError: (e) => toast(errorMessage(e), 'error'),
+    onError: (e) => {
+      const msg = errorMessage(e);
+      if (/invalid status transition/i.test(msg)) {
+        void qc.invalidateQueries({ queryKey: ['order', id] });
+        void qc.invalidateQueries({ queryKey: ['orders'] });
+        return;
+      }
+      toast(msg, 'error');
+    },
   });
 
   if (q.isLoading) {
@@ -159,6 +167,7 @@ export function OrderDetailPage() {
         {action && (
           <Button
             loading={m.isPending}
+            disabled={m.isPending}
             onClick={() => m.mutate(action.status)}
           >
             {action.label}
