@@ -16,7 +16,7 @@ import {
   Skeleton,
   useToast,
 } from '@/shared/ui';
-import { money } from '@/shared/lib/format';
+import { dateTime, money } from '@/shared/lib/format';
 import { mediaUrl } from '@/shared/lib/media';
 
 function hasProductImage(p: Product): boolean {
@@ -157,6 +157,7 @@ export function ProductsPage() {
                 <th>Price</th>
                 <th>Badge</th>
                 <th>Status</th>
+                <th>Created</th>
                 <th className="text-right">Actions</th>
               </tr>
             </thead>
@@ -202,6 +203,9 @@ export function ProductsPage() {
                     ) : (
                       <Badge tone="green">Available</Badge>
                     )}
+                  </td>
+                  <td className="whitespace-nowrap text-[var(--muted-foreground)]">
+                    {dateTime(p.createdAt)}
                   </td>
                   <td className="space-x-2 text-right whitespace-nowrap">
                     <Button
