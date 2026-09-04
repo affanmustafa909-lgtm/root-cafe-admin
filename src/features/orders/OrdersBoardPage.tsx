@@ -175,6 +175,10 @@ export function OrdersBoardPage() {
       dataOf<Order[]>(await api.get('/admin/orders')).map((o) =>
         mapOrder(o as unknown as Record<string, unknown>),
       ),
+    staleTime: 3_000,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const refresh = useCallback(() => {

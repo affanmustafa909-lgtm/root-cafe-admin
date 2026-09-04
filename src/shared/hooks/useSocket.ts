@@ -17,7 +17,13 @@ export function useSocket(onEvent?: () => void) {
     const token = getToken();
     if (!token) return;
 
-    const socket: Socket = io(socketBaseUrl(), { auth: { token } });
+    const socket: Socket = io(socketBaseUrl(), {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 800,
+    });
 
     const onConnect = () => setConnected(true);
     const onDisconnect = () => setConnected(false);
