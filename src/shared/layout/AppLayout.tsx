@@ -1,11 +1,11 @@
-import { useMemo } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { CalendarDays, Menu, RefreshCw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Sidebar } from './Sidebar';
 import { useSidebarState } from './useSidebarState';
 import { useAuth } from '@/features/auth/AuthContext';
-import { Avatar, Button } from '@/shared/ui';
+import { Avatar, Button, useToast } from '@/shared/ui';
 
 const titles: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -50,7 +50,10 @@ function breadcrumbs(pathname: string) {
 export function AppLayout() {
   const { user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const qc = useQueryClient();
+  const { toast } = useToast();
+  const [refreshing, setRefreshing] = useState(false);
   const {
     collapsed,
     toggleCollapse,
@@ -77,6 +80,19 @@ export function AppLayout() {
       }).format(new Date()),
     [],
   );
+
+  const refreshAll = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await qc.invalidateQueries();
+      toast('Data refreshed');
+    } catch {
+      toast('Could not refresh', 'error');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const sidebarOffset = collapsed
     ? 'lg:ml-[var(--sidebar-collapsed)]'
@@ -141,23 +157,41 @@ export function AppLayout() {
           </div>
 
           <div className="flex items-center gap-1 sm:gap-2">
-            <span className="hidden items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs text-[var(--muted-foreground)] shadow-[var(--shadow-xs)] sm:inline-flex">
+            <button
+              type="button"
+              className="hidden items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs text-[var(--muted-foreground)] shadow-[var(--shadow-xs)] transition-colors hover:border-[var(--primary)] hover:text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] sm:inline-flex"
+              onClick={() => navigate('/reports')}
+              title="Open today’s reports"
+              aria-label={`Open reports for ${today}`}
+            >
               <CalendarDays size={13} aria-hidden />
               {today}
-            </span>
+            </button>
             <Button
               variant="ghost"
               size="sm"
               className="hidden text-[var(--muted-foreground)] sm:inline-flex"
-              onClick={() => void qc.invalidateQueries()}
+              onClick={() => void refreshAll()}
+              disabled={refreshing}
               aria-label="Refresh data"
+              title="Refresh data"
             >
-              <RefreshCw size={14} aria-hidden />
+              <RefreshCw
+                size={14}
+                aria-hidden
+                className={refreshing ? 'animate-spin' : undefined}
+              />
             </Button>
 
-            <div className="flex items-center gap-2.5 rounded-full border border-[var(--border)] bg-[var(--card)] py-1 pr-3 pl-1 shadow-[var(--shadow-sm)]">
+            <button
+              type="button"
+              className="flex items-center gap-2.5 rounded-full border border-[var(--border)] bg-[var(--card)] py-1 pr-3 pl-1 shadow-[var(--shadow-sm)] transition-colors hover:border-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+              onClick={() => navigate('/settings')}
+              title="Open settings"
+              aria-label="Open settings"
+            >
               <Avatar name={user?.name} size="sm" />
-              <div className="hidden min-w-0 sm:block">
+              <div className="hidden min-w-0 text-left sm:block">
                 <p className="max-w-[9rem] truncate text-xs font-semibold text-[var(--foreground)]">
                   {user?.name}
                 </p>
@@ -165,7 +199,7 @@ export function AppLayout() {
                   {user?.role?.toLowerCase()}
                 </p>
               </div>
-            </div>
+            </button>
           </div>
         </header>
 

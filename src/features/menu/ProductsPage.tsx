@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, X } from 'lucide-react';
 import { api, dataOf, errorMessage } from '@/shared/api/client';
-import type { Product } from '@/shared/types';
-import { mapProduct } from '@/shared/lib/mappers';
+import type { Category, Product } from '@/shared/types';
+import { mapCategory, mapProduct } from '@/shared/lib/mappers';
 import {
   Badge,
   Button,
@@ -13,15 +13,21 @@ import {
   ErrorState,
   Input,
   PageHeader,
+  Select,
   Skeleton,
   useToast,
 } from '@/shared/ui';
 import { dateTime, money } from '@/shared/lib/format';
 import { mediaUrl } from '@/shared/lib/media';
 
+type StatusFilter = 'all' | 'available' | 'sold_out' | 'inactive';
+type BadgeFilter = 'all' | 'sale' | 'top';
+
 export function ProductsPage() {
   const [s, setS] = useState('');
-  const [showInactive, setShowInactive] = useState(false);
+  const [categoryId, setCategoryId] = useState('all');
+  const [status, setStatus] = useState<StatusFilter>('all');
+  const [badge, setBadge] = useState<BadgeFilter>('all');
   const [del, setDel] = useState<Product | null>(null);
   const nav = useNavigate();
   const qc = useQueryClient();
@@ -33,6 +39,14 @@ export function ProductsPage() {
       dataOf<Record<string, unknown>[]>(await api.get('/admin/products')).map(
         (p) => mapProduct(p) as Product,
       ),
+  });
+
+  const categories = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () =>
+      dataOf<Record<string, unknown>[]>(
+        await api.get('/admin/categories'),
+      ).map((c) => mapCategory(c) as Category),
   });
 
   const toggle = useMutation({
@@ -58,17 +72,59 @@ export function ProductsPage() {
     onError: (e) => toast(errorMessage(e), 'error'),
   });
 
+  const categoryOptions = useMemo(() => {
+    const list = categories.data ?? [];
+    return [...list].sort((a, b) =>
+      (a.name || '').localeCompare(b.name || ''),
+    );
+  }, [categories.data]);
+
+  const filtersActive =
+    s.trim() !== '' ||
+    categoryId !== 'all' ||
+    status !== 'all' ||
+    badge !== 'all';
+
   const rows = useMemo(() => {
-    const qText = s.toLowerCase();
+    const qText = s.toLowerCase().trim();
     return (
       q.data?.filter((p) => {
-        if (!showInactive && p.active === false) return false;
+        if (categoryId !== 'all') {
+          const id = p.categoryId || p.category?.id;
+          if (id !== categoryId) return false;
+        }
+
+        if (status === 'available') {
+          if (p.active === false || p.soldOut) return false;
+        } else if (status === 'sold_out') {
+          if (p.active === false || !p.soldOut) return false;
+        } else if (status === 'inactive') {
+          if (p.active !== false) return false;
+        } else if (p.active === false) {
+          // "all" still hides inactive unless explicitly filtered
+          return false;
+        }
+
+        if (badge === 'sale') {
+          if (!(p.discountPercent && p.discountPercent > 0)) return false;
+        } else if (badge === 'top') {
+          if (!p.isTopSale) return false;
+        }
+
+        if (!qText) return true;
         return `${p.name} ${p.category?.name ?? ''}`
           .toLowerCase()
           .includes(qText);
       }) ?? []
     );
-  }, [q.data, s, showInactive]);
+  }, [q.data, s, categoryId, status, badge]);
+
+  const clearFilters = () => {
+    setS('');
+    setCategoryId('all');
+    setStatus('all');
+    setBadge('all');
+  };
 
   if (q.isLoading) {
     return (
@@ -96,16 +152,15 @@ export function ProductsPage() {
         title="Products"
         description={`${rows.length} items · pricing, images, and availability`}
         action={
-          <Link to="/menu/products/new">
-            <Button type="button">
-              <Plus size={16} aria-hidden />
-              Add product
-            </Button>
-          </Link>
+          <Button type="button" onClick={() => nav('/menu/products/new')}>
+            <Plus size={16} aria-hidden />
+            Add product
+          </Button>
         }
       />
+
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative max-w-sm flex-1">
+        <div className="relative min-w-[12rem] max-w-sm flex-1">
           <Search
             size={16}
             className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[var(--muted-foreground)]"
@@ -119,27 +174,71 @@ export function ProductsPage() {
             aria-label="Search products"
           />
         </div>
-        <label className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-          <input
-            type="checkbox"
-            className="checkbox"
-            checked={showInactive}
-            onChange={(e) => setShowInactive(e.target.checked)}
-          />
-          Show inactive
-        </label>
+
+        <Select
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
+          aria-label="Filter by category"
+          className="min-w-[10rem]"
+        >
+          <option value="all">All categories</option>
+          {categoryOptions.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </Select>
+
+        <Select
+          value={status}
+          onChange={(e) => setStatus(e.target.value as StatusFilter)}
+          aria-label="Filter by status"
+          className="min-w-[9rem]"
+        >
+          <option value="all">All status</option>
+          <option value="available">Available</option>
+          <option value="sold_out">Sold out</option>
+          <option value="inactive">Inactive</option>
+        </Select>
+
+        <Select
+          value={badge}
+          onChange={(e) => setBadge(e.target.value as BadgeFilter)}
+          aria-label="Filter by badge"
+          className="min-w-[8rem]"
+        >
+          <option value="all">All badges</option>
+          <option value="sale">On sale</option>
+          <option value="top">Top sale</option>
+        </Select>
+
+        {filtersActive && (
+          <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+            <X size={14} aria-hidden />
+            Clear
+          </Button>
+        )}
       </div>
+
       {!rows.length ? (
         <EmptyState
           title="No products found"
-          message="Try another search, or add a new product."
+          message={
+            filtersActive
+              ? 'Try clearing filters or searching another term.'
+              : 'Try another search, or add a new product.'
+          }
           action={
-            <Link to="/menu/products/new">
-              <Button type="button">
+            filtersActive ? (
+              <Button type="button" variant="secondary" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            ) : (
+              <Button type="button" onClick={() => nav('/menu/products/new')}>
                 <Plus size={16} aria-hidden />
                 Add product
               </Button>
-            </Link>
+            )
           }
         />
       ) : (
