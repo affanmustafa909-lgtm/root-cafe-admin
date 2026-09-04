@@ -19,6 +19,8 @@ const titles: Record<string, string> = {
   '/menu/cake-of-day': 'Cake of the Day',
   '/menu/home-banner': 'Home Banner',
   '/settings/pickup': 'Pickup schedule',
+  '/settings/stamp-card': 'Stamp card',
+  '/settings/onboarding': 'Get Started',
   '/settings': 'Settings',
   '/reports': 'Reports',
 };

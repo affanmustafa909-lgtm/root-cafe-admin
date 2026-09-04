@@ -5,7 +5,6 @@ import {
   SlidersHorizontal,
   CakeSlice,
   ImageIcon,
-  Clock3,
   ArrowRight,
 } from 'lucide-react';
 import { PageHeader } from '@/shared/ui';
@@ -46,20 +45,6 @@ const links = [
     icon: ImageIcon,
     well: 'icon-well-primary',
   },
-  {
-    to: '/settings/onboarding',
-    label: 'Get Started screens',
-    description: 'Onboarding carousel — images, text & layout (1080×1920).',
-    icon: ImageIcon,
-    well: 'icon-well-sky',
-  },
-  {
-    to: '/settings/pickup',
-    label: 'Pickup schedule',
-    description: 'Days ahead, open hours, and time slots for checkout.',
-    icon: Clock3,
-    well: 'icon-well-amber',
-  },
 ] as const;
 
 export function MenuHome() {
@@ -67,7 +52,7 @@ export function MenuHome() {
     <div className="page-enter space-y-5">
       <PageHeader
         title="Menu"
-        description="Keep the customer menu accurate and available."
+        description="Keep the customer menu accurate and available. Café ops live under Settings."
       />
       <div className="grid gap-3 sm:grid-cols-2">
         {links.map(({ to, label, description, icon: Icon, well }) => (

@@ -61,8 +61,11 @@ function SidebarPanel({
   const location = useLocation();
   const manage = canManage(user?.role);
   const onMenuPath = location.pathname.startsWith('/menu');
+  const onSettingsPath = location.pathname.startsWith('/settings');
   const [menuForced, setMenuForced] = useState<boolean | null>(null);
+  const [settingsForced, setSettingsForced] = useState<boolean | null>(null);
   const menuOpen = menuForced ?? onMenuPath;
+  const settingsOpen = settingsForced ?? onSettingsPath;
 
   const groups = useMemo<NavGroup[]>(() => {
     const main: NavItem[] = [
@@ -77,17 +80,10 @@ function SidebarPanel({
       ? [{ to: '/reports', label: 'Reports', icon: ChartNoAxesCombined }]
       : [];
 
-    const system: NavItem[] = manage
-      ? [{ to: '/settings', label: 'Settings', icon: Settings }]
-      : [];
-
     return [
       { id: 'main', label: 'Main', items: main },
       ...(analytics.length
         ? [{ id: 'analytics', label: 'Analytics', items: analytics }]
-        : []),
-      ...(system.length
-        ? [{ id: 'system', label: 'System', items: system }]
         : []),
     ];
   }, [manage]);
@@ -103,15 +99,74 @@ function SidebarPanel({
     },
     { to: '/menu/cake-of-day', label: 'Cake of the Day', icon: CakeSlice },
     { to: '/menu/home-banner', label: 'Home Banner', icon: ImageIcon },
-    { to: '/settings/onboarding', label: 'Get Started', icon: ImageIcon },
+  ];
+
+  const settingsChildren: NavItem[] = [
+    { to: '/settings', label: 'Overview', icon: Settings, end: true },
     { to: '/settings/pickup', label: 'Pickup schedule', icon: Clock3 },
     { to: '/settings/stamp-card', label: 'Stamp card', icon: Stamp },
+    { to: '/settings/onboarding', label: 'Get Started', icon: ImageIcon },
   ];
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `nav-link ${isActive ? 'nav-link-active' : ''} ${
       collapsed ? 'justify-center px-0' : ''
     }`;
+
+  const renderExpandable = (
+    label: string,
+    Icon: LucideIcon,
+    open: boolean,
+    activePath: boolean,
+    onToggle: () => void,
+    children: NavItem[],
+  ) => (
+    <div>
+      <button
+        type="button"
+        className={`nav-link w-full ${
+          collapsed ? 'justify-center px-0' : ''
+        } ${activePath ? 'text-white' : ''}`}
+        onClick={onToggle}
+        aria-expanded={open}
+        title={collapsed ? label : undefined}
+      >
+        <span className="nav-link-icon">
+          <Icon size={collapsed ? 18 : 17} aria-hidden />
+        </span>
+        {!collapsed && (
+          <>
+            <span className="flex-1 truncate text-left">{label}</span>
+            <ChevronDown
+              size={14}
+              className={`shrink-0 text-[var(--sidebar-muted)] transition-transform duration-200 ${
+                open ? 'rotate-180' : ''
+              }`}
+              aria-hidden
+            />
+          </>
+        )}
+      </button>
+      {open && !collapsed && (
+        <div className="nav-sub space-y-0.5">
+          {children.map(({ to, label: childLabel, icon: ChildIcon, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={linkClass}
+              onClick={onNavigate}
+            >
+              <span className="nav-link-icon">
+                <ChildIcon size={15} aria-hidden />
+              </span>
+              <span className="truncate">{childLabel}</span>
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <aside
@@ -193,56 +248,38 @@ function SidebarPanel({
               {!collapsed && (
                 <p className="nav-section-label">Management</p>
               )}
-              <button
-                type="button"
-                className={`nav-link w-full ${
-                  collapsed ? 'justify-center px-0' : ''
-                } ${onMenuPath ? 'text-white' : ''}`}
-                onClick={() => {
-                  if (collapsed) {
-                    onToggleCollapse();
-                    setMenuForced(true);
-                  } else {
-                    setMenuForced((prev) => !(prev ?? onMenuPath));
-                  }
-                }}
-                aria-expanded={menuOpen}
-                title={collapsed ? 'Menu' : undefined}
-              >
-                <span className="nav-link-icon">
-                  <Utensils size={collapsed ? 18 : 17} aria-hidden />
-                </span>
-                {!collapsed && (
-                  <>
-                    <span className="flex-1 truncate text-left">Menu</span>
-                    <ChevronDown
-                      size={14}
-                      className={`shrink-0 text-[var(--sidebar-muted)] transition-transform duration-200 ${
-                        menuOpen ? 'rotate-180' : ''
-                      }`}
-                      aria-hidden
-                    />
-                  </>
+              <div className="space-y-0.5">
+                {renderExpandable(
+                  'Menu',
+                  Utensils,
+                  menuOpen,
+                  onMenuPath,
+                  () => {
+                    if (collapsed) {
+                      onToggleCollapse();
+                      setMenuForced(true);
+                    } else {
+                      setMenuForced((prev) => !(prev ?? onMenuPath));
+                    }
+                  },
+                  menuChildren,
                 )}
-              </button>
-              {menuOpen && !collapsed && (
-                <div className="nav-sub space-y-0.5">
-                  {menuChildren.map(({ to, label, icon: Icon, end }) => (
-                    <NavLink
-                      key={to}
-                      to={to}
-                      end={end}
-                      className={linkClass}
-                      onClick={onNavigate}
-                    >
-                      <span className="nav-link-icon">
-                        <Icon size={15} aria-hidden />
-                      </span>
-                      <span className="truncate">{label}</span>
-                    </NavLink>
-                  ))}
-                </div>
-              )}
+                {renderExpandable(
+                  'Settings',
+                  Settings,
+                  settingsOpen,
+                  onSettingsPath,
+                  () => {
+                    if (collapsed) {
+                      onToggleCollapse();
+                      setSettingsForced(true);
+                    } else {
+                      setSettingsForced((prev) => !(prev ?? onSettingsPath));
+                    }
+                  },
+                  settingsChildren,
+                )}
+              </div>
             </div>
           )}
         </div>
