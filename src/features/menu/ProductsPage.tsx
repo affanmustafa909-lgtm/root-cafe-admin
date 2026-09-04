@@ -19,10 +19,6 @@ import {
 import { dateTime, money } from '@/shared/lib/format';
 import { mediaUrl } from '@/shared/lib/media';
 
-function hasProductImage(p: Product): boolean {
-  return Boolean(p.imageUrl?.trim());
-}
-
 export function ProductsPage() {
   const [s, setS] = useState('');
   const [showInactive, setShowInactive] = useState(false);
@@ -66,7 +62,6 @@ export function ProductsPage() {
     const qText = s.toLowerCase();
     return (
       q.data?.filter((p) => {
-        if (!hasProductImage(p)) return false;
         if (!showInactive && p.active === false) return false;
         return `${p.name} ${p.category?.name ?? ''}`
           .toLowerCase()
@@ -171,12 +166,23 @@ export function ProductsPage() {
                           src={mediaUrl(p.imageUrl)}
                           alt=""
                           className="size-10 rounded-[var(--radius-md)] object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            const fallback =
+                              e.currentTarget.nextElementSibling;
+                            if (fallback instanceof HTMLElement) {
+                              fallback.style.display = 'flex';
+                            }
+                          }}
                         />
-                      ) : (
-                        <span className="flex size-10 items-center justify-center rounded-[var(--radius-md)] bg-[var(--muted)] text-xs font-bold text-[var(--muted-foreground)]">
-                          {p.name.slice(0, 2).toUpperCase()}
-                        </span>
-                      )}
+                      ) : null}
+                      <span
+                        className="flex size-10 items-center justify-center rounded-[var(--radius-md)] bg-[var(--muted)] text-xs font-bold text-[var(--muted-foreground)]"
+                        style={{ display: p.imageUrl ? 'none' : 'flex' }}
+                        aria-hidden
+                      >
+                        {p.name.slice(0, 2).toUpperCase()}
+                      </span>
                       <span className="font-semibold text-[var(--foreground)]">
                         {p.name}
                       </span>
