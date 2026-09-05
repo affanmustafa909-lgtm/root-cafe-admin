@@ -14,6 +14,10 @@ export const api = axios.create({
 api.interceptors.request.use((c) => {
   const t = getToken();
   if (t) c.headers.Authorization = `Bearer ${t}`;
+  // Let the browser set multipart boundary for image uploads
+  if (typeof FormData !== 'undefined' && c.data instanceof FormData) {
+    delete (c.headers as { 'Content-Type'?: string })['Content-Type'];
+  }
   return c;
 });
 
