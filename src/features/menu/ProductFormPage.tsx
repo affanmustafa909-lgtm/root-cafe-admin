@@ -6,9 +6,13 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { ArrowLeft } from 'lucide-react';
 import { api, dataOf, errorMessage } from '@/shared/api/client';
-import { mapCategory, mapProduct } from '@/shared/lib/mappers';
+import {
+  mapCategory,
+  mapCustomization,
+  mapProduct,
+} from '@/shared/lib/mappers';
 import { mediaUrl } from '@/shared/lib/media';
-import type { Category, Product } from '@/shared/types';
+import type { Category, Customization, Product } from '@/shared/types';
 import {
   Button,
   Checkbox,
@@ -31,7 +35,7 @@ const schema = z.object({
   isTopSale: z.boolean(),
   discountPercent: z.preprocess(
     (v) => (v === '' || v === null || v === undefined ? null : Number(v)),
-    z.number().min(0).max(90).nullable(),
+    z.number().min(0).max(50).nullable(),
   ),
   compareAtPrice: z.preprocess(
     (v) => (v === '' || v === null || v === undefined ? null : Number(v)),
@@ -41,27 +45,52 @@ const schema = z.object({
 });
 type Form = z.infer<typeof schema>;
 
+type ProductWithGroups = Product & {
+  customizationGroups?: { groupId?: string; group?: { id: string } }[];
+};
+
+function selectedGroupIds(product?: ProductWithGroups | null) {
+  if (!product?.customizationGroups?.length) return [] as string[];
+  return product.customizationGroups
+    .map((row) => row.groupId || row.group?.id)
+    .filter((id): id is string => !!id);
+}
+
 export function ProductFormPage() {
   const { id } = useParams();
   const nav = useNavigate();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [preview, setPreview] = useState<string | null>(null);
+  const [groupIds, setGroupIds] = useState<string[]>([]);
+
   const cats = useQuery({
     queryKey: ['categories'],
     queryFn: async () =>
       dataOf<Record<string, unknown>[]>(
         await api.get('/admin/categories'),
       ).map((c) => mapCategory(c) as Category),
+    staleTime: 30_000,
   });
+
+  const customs = useQuery({
+    queryKey: ['customizations'],
+    queryFn: async () =>
+      dataOf<Record<string, unknown>[]>(
+        await api.get('/admin/customizations'),
+      ).map((row) => mapCustomization(row) as Customization),
+    staleTime: 30_000,
+  });
+
   const product = useQuery({
     queryKey: ['product', id],
     queryFn: async () =>
       mapProduct(
         dataOf<Record<string, unknown>>(await api.get(`/admin/products/${id}`)),
-      ) as Product,
+      ) as ProductWithGroups,
     enabled: !!id,
   });
+
   const {
     register,
     handleSubmit,
@@ -96,10 +125,18 @@ export function ProductFormPage() {
       discountPercent: product.data.discountPercent ?? null,
       compareAtPrice: product.data.compareAtPrice ?? null,
     });
+    setGroupIds(selectedGroupIds(product.data));
     if (product.data.imageUrl) {
       setPreview(mediaUrl(product.data.imageUrl) ?? null);
     }
   }, [product.data, reset]);
+
+  useEffect(() => {
+    if (id) return;
+    if (!customs.data?.length) return;
+    // New product: pre-select common drink groups
+    setGroupIds(customs.data.map((g) => g.id));
+  }, [id, customs.data]);
 
   useEffect(() => {
     const file = (imageFiles as FileList | undefined)?.[0];
@@ -109,8 +146,16 @@ export function ProductFormPage() {
     return () => URL.revokeObjectURL(url);
   }, [imageFiles]);
 
+  const toggleGroup = (groupId: string) => {
+    setGroupIds((prev) =>
+      prev.includes(groupId)
+        ? prev.filter((x) => x !== groupId)
+        : [...prev, groupId],
+    );
+  };
+
   const save = useMutation({
-    mutationFn: (v: Form) => {
+    mutationFn: async (v: Form) => {
       const f = new FormData();
       f.append('name', v.name);
       f.append('description', v.description ?? '');
@@ -133,19 +178,27 @@ export function ProductFormPage() {
       );
       const file = (v.image as FileList | undefined)?.[0];
       if (file) f.append('image', file);
-      return id
-        ? api.patch(`/admin/products/${id}`, f)
-        : api.post('/admin/products', f);
+
+      const res = id
+        ? await api.patch(`/admin/products/${id}`, f)
+        : await api.post('/admin/products', f);
+      const saved = dataOf<Record<string, unknown>>(res);
+      const productId = (saved.id as string) || id!;
+      await api.put(`/admin/customizations/products/${productId}/groups`, {
+        groupIds,
+      });
+      return saved;
     },
     onSuccess: () => {
       toast('Product saved');
       void qc.invalidateQueries({ queryKey: ['products'] });
+      void qc.invalidateQueries({ queryKey: ['product', id] });
       nav('/menu/products');
     },
     onError: (e) => toast(errorMessage(e), 'error'),
   });
 
-  if (cats.isLoading || product.isLoading) {
+  if (cats.isLoading || customs.isLoading || product.isLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-10 w-48" />
@@ -154,7 +207,7 @@ export function ProductFormPage() {
     );
   }
 
-  if (cats.isError || product.isError) {
+  if (cats.isError || customs.isError || product.isError) {
     return (
       <ErrorState
         title="Unable to load form"
@@ -216,7 +269,10 @@ export function ProductFormPage() {
             </label>
             <label className="block">
               <span className="label">Category</span>
-              <Select {...register('categoryId')} aria-invalid={!!errors.categoryId}>
+              <Select
+                {...register('categoryId')}
+                aria-invalid={!!errors.categoryId}
+              >
                 <option value="">Select category</option>
                 {cats.data?.map((c) => (
                   <option key={c.id} value={c.id}>
@@ -231,6 +287,49 @@ export function ProductFormPage() {
               )}
             </label>
           </div>
+        </section>
+
+        <section className="space-y-4 border-t border-[var(--border)] pt-5">
+          <h3 className="section-title">Customizations on app</h3>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Tick groups to show on this product (Size, Milk, Syrups…). Untick to
+            hide. Edit option names/prices under Menu → Customizations.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                setGroupIds((customs.data ?? []).map((g) => g.id))
+              }
+            >
+              Show all
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setGroupIds([])}
+            >
+              Hide all
+            </Button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(customs.data ?? []).map((g) => (
+              <Checkbox
+                key={g.id}
+                label={`${g.name} (${g.options.length} options)`}
+                checked={groupIds.includes(g.id)}
+                onChange={() => toggleGroup(g.id)}
+              />
+            ))}
+          </div>
+          {!customs.data?.length && (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              No customization groups yet. Add them under Menu → Customizations.
+            </p>
+          )}
         </section>
 
         <section className="space-y-4 border-t border-[var(--border)] pt-5">
@@ -271,14 +370,14 @@ export function ProductFormPage() {
               <Input
                 type="number"
                 min={0}
-                max={90}
+                max={50}
                 step={1}
                 placeholder="e.g. 4"
                 {...register('discountPercent')}
               />
               {errors.discountPercent && (
                 <small className="mt-1 block text-[var(--destructive)]">
-                  Enter 0–90
+                  Enter 0–50
                 </small>
               )}
             </label>

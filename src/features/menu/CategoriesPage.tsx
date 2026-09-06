@@ -34,6 +34,7 @@ export function CategoriesPage() {
     queryKey: ['categories'],
     queryFn: async () =>
       dataOf<Category[]>(await api.get('/admin/categories')),
+    staleTime: 30_000,
   });
   const {
     register,
@@ -59,7 +60,11 @@ export function CategoriesPage() {
     mutationFn: () => api.delete(`/admin/categories/${del!.id}`),
     onSuccess: () => {
       toast('Category deleted');
+      const removedId = del!.id;
       setDel(null);
+      qc.setQueryData<Category[]>(['categories'], (prev) =>
+        (prev ?? []).filter((c) => c.id !== removedId),
+      );
       void qc.invalidateQueries({ queryKey: ['categories'] });
     },
     onError: (e) => toast(errorMessage(e), 'error'),

@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Plus } from 'lucide-react';
 import { api, dataOf, errorMessage } from '@/shared/api/client';
+import { mapCustomization } from '@/shared/lib/mappers';
 import type { Customization } from '@/shared/types';
 import {
   Badge,
@@ -29,6 +30,24 @@ const schema = z.object({
 });
 type Form = z.infer<typeof schema>;
 
+function parseOptions(raw: string) {
+  return raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [namePart, pricePart] = line.split('|');
+      const name = (namePart ?? '').trim();
+      const priceRaw = (pricePart ?? '0').trim();
+      const price = Number(priceRaw);
+      return {
+        name,
+        price: Number.isFinite(price) ? price : 0,
+      };
+    })
+    .filter((o) => o.name.length > 0);
+}
+
 export function CustomizationsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -36,24 +55,24 @@ export function CustomizationsPage() {
   const [del, setDel] = useState<Customization | null>(null);
   const { register, handleSubmit, reset } = useForm<Form>({
     resolver: zodResolver(schema),
+    defaultValues: { name: '', options: '', required: false },
   });
   const q = useQuery({
     queryKey: ['customizations'],
     queryFn: async () =>
-      dataOf<Customization[]>(await api.get('/admin/customizations')),
+      dataOf<Record<string, unknown>[]>(
+        await api.get('/admin/customizations'),
+      ).map((row) => mapCustomization(row) as Customization),
+    staleTime: 30_000,
   });
 
   const save = useMutation({
     mutationFn: (v: Form) => {
       const body = {
-        ...v,
-        options: v.options
-          .split('\n')
-          .filter(Boolean)
-          .map((x) => {
-            const [n, p] = x.split('|');
-            return { name: n.trim(), price: Number(p) || 0 };
-          }),
+        name: v.name.trim(),
+        required: v.required,
+        isRequired: v.required,
+        options: parseOptions(v.options),
       };
       return edit
         ? api.patch(`/admin/customizations/${edit.id}`, body)
@@ -74,6 +93,7 @@ export function CustomizationsPage() {
       setDel(null);
       void qc.invalidateQueries({ queryKey: ['customizations'] });
     },
+    onError: (e) => toast(errorMessage(e), 'error'),
   });
 
   if (q.isLoading) {
@@ -146,12 +166,12 @@ export function CustomizationsPage() {
               <ul className="mt-3 flex-1 space-y-1.5 text-sm text-[var(--muted-foreground)]">
                 {c.options.map((x) => (
                   <li
-                    key={x.name}
+                    key={`${c.id}-${x.name}`}
                     className="flex items-center justify-between gap-2"
                   >
                     <span>{x.name}</span>
                     <span className="font-medium text-[var(--foreground)]">
-                      {x.price ? `+${money(x.price)}` : 'Free'}
+                      {x.price > 0 ? `+${money(x.price)}` : 'Free'}
                     </span>
                   </li>
                 ))}
@@ -164,7 +184,7 @@ export function CustomizationsPage() {
                     reset({
                       name: c.name,
                       options: c.options
-                        .map((x) => `${x.name}|${x.price}`)
+                        .map((x) => `${x.name}|${Number(x.price) || 0}`)
                         .join('\n'),
                       required: !!c.required,
                     });
@@ -217,6 +237,7 @@ export function CustomizationsPage() {
         message={`Delete ${del?.name}?`}
         onCancel={() => setDel(null)}
         onConfirm={() => remove.mutate()}
+        busy={remove.isPending}
       />
     </div>
   );

@@ -82,16 +82,24 @@ export function mapCustomer(raw: Record<string, unknown>) {
 
 export function mapCustomization(raw: Record<string, unknown>) {
   const options =
-    (raw.options as { name: string; additionalPrice?: number | string }[]) ??
-    [];
+    (raw.options as {
+      id?: string;
+      name: string;
+      additionalPrice?: number | string;
+      price?: number | string;
+      isActive?: boolean;
+    }[]) ?? [];
   return {
     id: raw.id as string,
     name: raw.name as string,
-    required: Boolean(raw.isRequired),
+    required: Boolean(raw.isRequired ?? raw.required),
     active: raw.isActive !== false,
-    options: options.map((o) => ({
-      name: o.name,
-      price: Number(o.additionalPrice ?? 0),
-    })),
+    options: options
+      .filter((o) => o.isActive !== false)
+      .map((o) => ({
+        id: o.id,
+        name: o.name,
+        price: Number(o.additionalPrice ?? o.price ?? 0) || 0,
+      })),
   };
 }
