@@ -32,6 +32,7 @@ import {
 } from '@/shared/lib/format';
 import { mapOrder } from '@/shared/lib/mappers';
 import { useSocket } from '@/shared/hooks/useSocket';
+import { DeclineOrderModal } from './DeclineOrderModal';
 
 const cols: OrderStatus[] = [
   'RECEIVED',
@@ -199,6 +200,7 @@ export function OrdersBoardPage() {
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [advancingId, setAdvancingId] = useState<string | null>(null);
+  const [declineTarget, setDeclineTarget] = useState<Order | null>(null);
 
   const q = useQuery({
     queryKey: ['orders'],
@@ -454,17 +456,7 @@ export function OrdersBoardPage() {
                         }
                         onDecline={
                           !advancingId
-                            ? () => {
-                                const reason = window.prompt(
-                                  'Decline reason (optional) — e.g. sold out, closing early',
-                                );
-                                if (reason === null) return;
-                                m.mutate({
-                                  id: o.id,
-                                  status: 'DECLINED',
-                                  notes: reason.trim() || undefined,
-                                });
-                              }
+                            ? () => setDeclineTarget(o)
                             : undefined
                         }
                       />
@@ -476,6 +468,26 @@ export function OrdersBoardPage() {
           })}
         </div>
       )}
+
+      <DeclineOrderModal
+        open={!!declineTarget}
+        orderNumber={declineTarget?.orderNumber}
+        busy={!!declineTarget && advancingId === declineTarget.id && m.isPending}
+        onClose={() => setDeclineTarget(null)}
+        onConfirm={(notes) => {
+          if (!declineTarget) return;
+          m.mutate(
+            {
+              id: declineTarget.id,
+              status: 'DECLINED',
+              notes,
+            },
+            {
+              onSuccess: () => setDeclineTarget(null),
+            },
+          );
+        }}
+      />
     </div>
   );
 }

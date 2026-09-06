@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
+import { useState } from 'react';
 import {
   ArrowLeft,
   Check,
@@ -27,6 +28,7 @@ import {
   titleCase,
 } from '@/shared/lib/format';
 import { mapOrder } from '@/shared/lib/mappers';
+import { DeclineOrderModal } from './DeclineOrderModal';
 
 const acts: Partial<
   Record<OrderStatus, { status: OrderStatus; label: string }>
@@ -50,6 +52,7 @@ export function OrderDetailPage() {
   const { id } = useParams();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [declineOpen, setDeclineOpen] = useState(false);
   const q = useQuery({
     queryKey: ['order', id],
     queryFn: async () =>
@@ -182,16 +185,7 @@ export function OrderDetailPage() {
             variant="secondary"
             loading={m.isPending}
             disabled={m.isPending}
-            onClick={() => {
-              const reason = window.prompt(
-                'Decline reason (optional) — e.g. sold out, closing early',
-              );
-              if (reason === null) return;
-              m.mutate({
-                status: 'DECLINED',
-                notes: reason.trim() || undefined,
-              });
-            }}
+            onClick={() => setDeclineOpen(true)}
           >
             Decline order
           </Button>
@@ -203,6 +197,19 @@ export function OrderDetailPage() {
           Reason: {o.notes}
         </p>
       ) : null}
+
+      <DeclineOrderModal
+        open={declineOpen}
+        orderNumber={o.orderNumber}
+        busy={m.isPending}
+        onClose={() => setDeclineOpen(false)}
+        onConfirm={(notes) => {
+          m.mutate(
+            { status: 'DECLINED', notes },
+            { onSuccess: () => setDeclineOpen(false) },
+          );
+        }}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="card p-5">
