@@ -16,7 +16,13 @@ api.interceptors.request.use((c) => {
   if (t) c.headers.Authorization = `Bearer ${t}`;
   // Let the browser set multipart boundary for image uploads
   if (typeof FormData !== 'undefined' && c.data instanceof FormData) {
-    delete (c.headers as { 'Content-Type'?: string })['Content-Type'];
+    const h = c.headers as {
+      delete?: (k: string) => void;
+      'Content-Type'?: string;
+      set?: (k: string, v: unknown) => void;
+    };
+    if (typeof h.delete === 'function') h.delete('Content-Type');
+    else delete h['Content-Type'];
   }
   return c;
 });

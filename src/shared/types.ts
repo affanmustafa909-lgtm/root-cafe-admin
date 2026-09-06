@@ -47,6 +47,8 @@ export interface Product {
   categoryId?: string;
   category?: Category;
   imageUrl?: string;
+  imageUrlHot?: string | null;
+  imageUrlCold?: string | null;
   soldOut?: boolean;
   active?: boolean;
   isTopSale?: boolean;

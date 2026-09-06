@@ -42,6 +42,8 @@ const schema = z.object({
     z.number().min(0).nullable(),
   ),
   image: z.any().optional(),
+  imageHot: z.any().optional(),
+  imageCold: z.any().optional(),
 });
 type Form = z.infer<typeof schema>;
 
@@ -84,12 +86,22 @@ function selectedOptionsByGroup(
   return out;
 }
 
+function firstFile(v: unknown): File | undefined {
+  if (!v) return undefined;
+  if (v instanceof File) return v;
+  const list = v as FileList;
+  return list?.[0];
+}
+
 export function ProductFormPage() {
   const { id } = useParams();
   const nav = useNavigate();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [preview, setPreview] = useState<string | null>(null);
+  const [previewHot, setPreviewHot] = useState<string | null>(null);
+  const [previewCold, setPreviewCold] = useState<string | null>(null);
+  const [showVariations, setShowVariations] = useState(false);
   const [groupIds, setGroupIds] = useState<string[]>([]);
   const [optionIdsByGroup, setOptionIdsByGroup] = useState<
     Record<string, string[]>
@@ -141,6 +153,9 @@ export function ProductFormPage() {
   });
 
   const imageFiles = watch('image');
+  const imageHotFiles = watch('imageHot');
+  const imageColdFiles = watch('imageCold');
+  const categoryId = watch('categoryId');
 
   useEffect(() => {
     if (!product.data) return;
@@ -160,18 +175,41 @@ export function ProductFormPage() {
     setOptionIdsByGroup(
       selectedOptionsByGroup(product.data, customs.data ?? undefined),
     );
-    if (product.data.imageUrl) {
-      setPreview(mediaUrl(product.data.imageUrl) ?? null);
+    setPreview(mediaUrl(product.data.imageUrl) ?? null);
+    setPreviewHot(mediaUrl(product.data.imageUrlHot) ?? null);
+    setPreviewCold(mediaUrl(product.data.imageUrlCold) ?? null);
+    if (product.data.imageUrlHot || product.data.imageUrlCold) {
+      setShowVariations(true);
     }
   }, [product.data, customs.data, reset]);
 
   useEffect(() => {
-    const file = (imageFiles as FileList | undefined)?.[0];
+    const file = firstFile(imageFiles);
     if (!file) return;
     const url = URL.createObjectURL(file);
     setPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [imageFiles]);
+
+  useEffect(() => {
+    const file = firstFile(imageHotFiles);
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setPreviewHot(url);
+    return () => URL.revokeObjectURL(url);
+  }, [imageHotFiles]);
+
+  useEffect(() => {
+    const file = firstFile(imageColdFiles);
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setPreviewCold(url);
+    return () => URL.revokeObjectURL(url);
+  }, [imageColdFiles]);
+
+  useEffect(() => {
+    if (categoryId === 'menu-cat-protein') setShowVariations(true);
+  }, [categoryId]);
 
   const toggleGroup = (groupId: string) => {
     const group = customs.data?.find((g) => g.id === groupId);
@@ -238,8 +276,14 @@ export function ProductFormPage() {
           ? ''
           : String(v.compareAtPrice),
       );
-      const file = (v.image as FileList | undefined)?.[0];
+      const file = firstFile(v.image);
       if (file) f.append('image', file);
+      if (showVariations) {
+        const hot = firstFile(v.imageHot);
+        const cold = firstFile(v.imageCold);
+        if (hot) f.append('imageHot', hot);
+        if (cold) f.append('imageCold', cold);
+      }
 
       const res = id
         ? await api.patch(`/admin/products/${id}`, f)
@@ -267,7 +311,7 @@ export function ProductFormPage() {
     return (
       <div className="space-y-4">
         <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-96 max-w-2xl" />
+        <Skeleton className="h-96 max-w-3xl" />
       </div>
     );
   }
@@ -284,8 +328,12 @@ export function ProductFormPage() {
   return (
     <div className="page-enter space-y-5">
       <PageHeader
-        title={id ? 'Edit product' : 'New product'}
-        description="Customer-facing menu details, pricing, and availability."
+        title={id ? 'Edit product' : 'Add product'}
+        description={
+          id
+            ? 'Update menu details, photos, and availability.'
+            : 'Name, price, photo, and hot/cold variants for the customer app.'
+        }
         action={
           <Link to="/menu/products">
             <Button variant="ghost" size="sm">
@@ -296,33 +344,30 @@ export function ProductFormPage() {
         }
       />
       <form
-        className="card max-w-2xl space-y-6 p-6 sm:p-7"
+        className="card mx-auto max-w-3xl space-y-7 p-6 sm:p-8"
         onSubmit={handleSubmit((v) => save.mutate(v))}
         noValidate
       >
         <section className="space-y-4">
           <h3 className="section-title">Basics</h3>
-          <label className="block">
-            <span className="label">Name</span>
-            <Input {...register('name')} aria-invalid={!!errors.name} />
-            {errors.name && (
-              <small className="mt-1 block text-[var(--destructive)]">
-                Required
-              </small>
-            )}
-          </label>
-          <label className="block">
-            <span className="label">Description</span>
-            <Textarea
-              {...register('description')}
-              placeholder="Short description shown on the menu"
-            />
-          </label>
-        </section>
-
-        <section className="space-y-4 border-t border-[var(--border)] pt-5">
-          <h3 className="section-title">Pricing & category</h3>
           <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block sm:col-span-2">
+              <span className="label">Name</span>
+              <Input {...register('name')} aria-invalid={!!errors.name} />
+              {errors.name && (
+                <small className="mt-1 block text-[var(--destructive)]">
+                  Required
+                </small>
+              )}
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="label">Description</span>
+              <Textarea
+                {...register('description')}
+                rows={3}
+                placeholder="Short description shown on the menu"
+              />
+            </label>
             <label className="block">
               <span className="label">Price (EUR)</span>
               <Input type="number" step="0.01" {...register('price')} />
@@ -354,11 +399,91 @@ export function ProductFormPage() {
           </div>
         </section>
 
-        <section className="space-y-4 border-t border-[var(--border)] pt-5">
+        <section className="space-y-4 border-t border-[var(--border)] pt-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 className="section-title">Photos</h3>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                Main image for lists. Add hot/cold when the drink changes by
+                temperature (protein drinks).
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant={showVariations ? 'secondary' : 'primary'}
+              size="sm"
+              onClick={() => setShowVariations((v) => !v)}
+            >
+              {showVariations ? 'Hide variations' : 'Add variations'}
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap items-start gap-4">
+            {preview ? (
+              <img
+                src={preview}
+                alt="Product preview"
+                className="size-28 rounded-[var(--radius-lg)] border border-[var(--border)] object-cover"
+              />
+            ) : (
+              <div className="flex size-28 items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-[var(--border)] text-xs text-[var(--muted-foreground)]">
+                No photo
+              </div>
+            )}
+            <label className="block min-w-[12rem] flex-1">
+              <span className="label">Main image</span>
+              <Input type="file" accept="image/*" {...register('image')} />
+              <span className="mt-1 block text-xs text-[var(--muted-foreground)]">
+                JPG or PNG, ideally square.
+              </span>
+            </label>
+          </div>
+
+          {showVariations && (
+            <div className="grid gap-4 rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--muted)]/30 p-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <span className="label">Hot variation</span>
+                {previewHot ? (
+                  <img
+                    src={previewHot}
+                    alt="Hot"
+                    className="size-24 rounded-[var(--radius-lg)] border border-[var(--border)] object-cover"
+                  />
+                ) : (
+                  <div className="flex size-24 items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-[var(--border)] text-[10px] text-[var(--muted-foreground)]">
+                    Hot
+                  </div>
+                )}
+                <Input type="file" accept="image/*" {...register('imageHot')} />
+              </div>
+              <div className="space-y-2">
+                <span className="label">Cold variation</span>
+                {previewCold ? (
+                  <img
+                    src={previewCold}
+                    alt="Cold"
+                    className="size-24 rounded-[var(--radius-lg)] border border-[var(--border)] object-cover"
+                  />
+                ) : (
+                  <div className="flex size-24 items-center justify-center rounded-[var(--radius-lg)] border border-dashed border-[var(--border)] text-[10px] text-[var(--muted-foreground)]">
+                    Cold
+                  </div>
+                )}
+                <Input
+                  type="file"
+                  accept="image/*"
+                  {...register('imageCold')}
+                />
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-4 border-t border-[var(--border)] pt-6">
           <h3 className="section-title">Customizations on app</h3>
           <p className="text-sm text-[var(--muted-foreground)]">
             Tick a group to show it on the app, then tick which options inside
-            (e.g. Temperature → Hot / Cold). Untick to hide.
+            (e.g. Temperature → Hot / Cold).
           </p>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -426,33 +551,8 @@ export function ProductFormPage() {
           )}
         </section>
 
-        <section className="space-y-4 border-t border-[var(--border)] pt-5">
-          <h3 className="section-title">Image</h3>
-          <div className="flex flex-wrap items-start gap-4">
-            {preview && (
-              <img
-                src={preview}
-                alt="Product preview"
-                className="size-24 rounded-[var(--radius-lg)] border border-[var(--border)] object-cover"
-              />
-            )}
-            <label className="block flex-1">
-              <span className="label">Upload image</span>
-              <Input type="file" accept="image/*" {...register('image')} />
-              <span className="mt-1 block text-xs text-[var(--muted-foreground)]">
-                JPG or PNG, ideally square.
-              </span>
-            </label>
-          </div>
-        </section>
-
-        <section className="space-y-4 border-t border-[var(--border)] pt-5">
+        <section className="space-y-4 border-t border-[var(--border)] pt-6">
           <h3 className="section-title">Sale badges</h3>
-          <p className="text-sm text-[var(--muted-foreground)]">
-            These appear on the customer app product card. Discount % shows a
-            pink ribbon (e.g. 4% OFF). Top sale shows a blue ribbon when no
-            discount is set.
-          </p>
           <Checkbox
             label="Top sale"
             checked={watch('isTopSale')}
@@ -469,11 +569,6 @@ export function ProductFormPage() {
                 placeholder="e.g. 4"
                 {...register('discountPercent')}
               />
-              {errors.discountPercent && (
-                <small className="mt-1 block text-[var(--destructive)]">
-                  Enter 0–50
-                </small>
-              )}
             </label>
             <label className="block">
               <span className="label">Original price (optional)</span>
@@ -488,7 +583,7 @@ export function ProductFormPage() {
           </div>
         </section>
 
-        <section className="space-y-3 border-t border-[var(--border)] pt-5">
+        <section className="space-y-3 border-t border-[var(--border)] pt-6">
           <h3 className="section-title">Availability</h3>
           <div className="flex flex-wrap gap-6">
             <Checkbox
@@ -504,9 +599,9 @@ export function ProductFormPage() {
           </div>
         </section>
 
-        <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-5">
+        <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-6">
           <Button type="submit" loading={save.isPending}>
-            {save.isPending ? 'Saving…' : 'Save product'}
+            {save.isPending ? 'Saving…' : id ? 'Save changes' : 'Add product'}
           </Button>
           <Button
             type="button"
