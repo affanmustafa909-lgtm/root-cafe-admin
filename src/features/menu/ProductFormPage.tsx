@@ -46,7 +46,11 @@ const schema = z.object({
 type Form = z.infer<typeof schema>;
 
 type ProductWithGroups = Product & {
-  customizationGroups?: { groupId?: string; group?: { id: string } }[];
+  customizationGroups?: {
+    groupId?: string;
+    enabledOptionIds?: string[];
+    group?: { id: string; options?: { id?: string }[] };
+  }[];
 };
 
 function selectedGroupIds(product?: ProductWithGroups | null) {
@@ -56,6 +60,30 @@ function selectedGroupIds(product?: ProductWithGroups | null) {
     .filter((id): id is string => !!id);
 }
 
+function selectedOptionsByGroup(
+  product: ProductWithGroups | null | undefined,
+  catalog: Customization[] | undefined,
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  if (!product?.customizationGroups?.length) {
+    return out;
+  }
+  for (const row of product.customizationGroups) {
+    const gid = row.groupId || row.group?.id;
+    if (!gid) continue;
+    const saved = row.enabledOptionIds ?? [];
+    if (saved.length) {
+      out[gid] = saved;
+      continue;
+    }
+    const catalogGroup = catalog?.find((g) => g.id === gid);
+    out[gid] = (catalogGroup?.options ?? row.group?.options ?? [])
+      .map((o) => o.id)
+      .filter((id): id is string => !!id);
+  }
+  return out;
+}
+
 export function ProductFormPage() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -63,6 +91,9 @@ export function ProductFormPage() {
   const { toast } = useToast();
   const [preview, setPreview] = useState<string | null>(null);
   const [groupIds, setGroupIds] = useState<string[]>([]);
+  const [optionIdsByGroup, setOptionIdsByGroup] = useState<
+    Record<string, string[]>
+  >({});
 
   const cats = useQuery({
     queryKey: ['categories'],
@@ -126,17 +157,13 @@ export function ProductFormPage() {
       compareAtPrice: product.data.compareAtPrice ?? null,
     });
     setGroupIds(selectedGroupIds(product.data));
+    setOptionIdsByGroup(
+      selectedOptionsByGroup(product.data, customs.data ?? undefined),
+    );
     if (product.data.imageUrl) {
       setPreview(mediaUrl(product.data.imageUrl) ?? null);
     }
-  }, [product.data, reset]);
-
-  useEffect(() => {
-    if (id) return;
-    if (!customs.data?.length) return;
-    // New product: pre-select common drink groups
-    setGroupIds(customs.data.map((g) => g.id));
-  }, [id, customs.data]);
+  }, [product.data, customs.data, reset]);
 
   useEffect(() => {
     const file = (imageFiles as FileList | undefined)?.[0];
@@ -147,11 +174,46 @@ export function ProductFormPage() {
   }, [imageFiles]);
 
   const toggleGroup = (groupId: string) => {
-    setGroupIds((prev) =>
-      prev.includes(groupId)
-        ? prev.filter((x) => x !== groupId)
-        : [...prev, groupId],
-    );
+    const group = customs.data?.find((g) => g.id === groupId);
+    const allOpts =
+      group?.options.map((o) => o.id).filter((x): x is string => !!x) ?? [];
+    setGroupIds((prev) => {
+      if (prev.includes(groupId)) {
+        setOptionIdsByGroup((opts) => {
+          const next = { ...opts };
+          delete next[groupId];
+          return next;
+        });
+        return prev.filter((x) => x !== groupId);
+      }
+      setOptionIdsByGroup((opts) => ({ ...opts, [groupId]: allOpts }));
+      return [...prev, groupId];
+    });
+  };
+
+  const toggleOption = (groupId: string, optionId: string) => {
+    setOptionIdsByGroup((prev) => {
+      const current = prev[groupId] ?? [];
+      const nextOpts = current.includes(optionId)
+        ? current.filter((x) => x !== optionId)
+        : [...current, optionId];
+      if (nextOpts.length === 0) {
+        setGroupIds((g) => g.filter((id) => id !== groupId));
+      } else {
+        setGroupIds((g) => (g.includes(groupId) ? g : [...g, groupId]));
+      }
+      return { ...prev, [groupId]: nextOpts };
+    });
+  };
+
+  const showAllCustoms = () => {
+    const ids = (customs.data ?? []).map((g) => g.id);
+    setGroupIds(ids);
+    const all: Record<string, string[]> = {};
+    for (const g of customs.data ?? []) {
+      all[g.id] = g.options.map((o) => o.id).filter((x): x is string => !!x);
+    }
+    setOptionIdsByGroup(all);
   };
 
   const save = useMutation({
@@ -185,7 +247,10 @@ export function ProductFormPage() {
       const saved = dataOf<Record<string, unknown>>(res);
       const productId = (saved.id as string) || id!;
       await api.put(`/admin/customizations/products/${productId}/groups`, {
-        groupIds,
+        groups: groupIds.map((groupId) => ({
+          groupId,
+          optionIds: optionIdsByGroup[groupId] ?? [],
+        })),
       });
       return saved;
     },
@@ -292,17 +357,15 @@ export function ProductFormPage() {
         <section className="space-y-4 border-t border-[var(--border)] pt-5">
           <h3 className="section-title">Customizations on app</h3>
           <p className="text-sm text-[var(--muted-foreground)]">
-            Tick groups to show on this product (Size, Milk, Syrups…). Untick to
-            hide. Edit option names/prices under Menu → Customizations.
+            Tick a group to show it on the app, then tick which options inside
+            (e.g. Temperature → Hot / Cold). Untick to hide.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               variant="secondary"
               size="sm"
-              onClick={() =>
-                setGroupIds((customs.data ?? []).map((g) => g.id))
-              }
+              onClick={showAllCustoms}
             >
               Show all
             </Button>
@@ -310,20 +373,51 @@ export function ProductFormPage() {
               type="button"
               variant="secondary"
               size="sm"
-              onClick={() => setGroupIds([])}
+              onClick={() => {
+                setGroupIds([]);
+                setOptionIdsByGroup({});
+              }}
             >
               Hide all
             </Button>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(customs.data ?? []).map((g) => (
-              <Checkbox
-                key={g.id}
-                label={`${g.name} (${g.options.length} options)`}
-                checked={groupIds.includes(g.id)}
-                onChange={() => toggleGroup(g.id)}
-              />
-            ))}
+          <div className="space-y-3">
+            {(customs.data ?? []).map((g) => {
+              const groupOn = groupIds.includes(g.id);
+              const selectedOpts = optionIdsByGroup[g.id] ?? [];
+              return (
+                <div
+                  key={g.id}
+                  className="rounded-[var(--radius-lg)] border border-[var(--border)] p-3"
+                >
+                  <Checkbox
+                    label={g.name}
+                    checked={groupOn}
+                    onChange={() => toggleGroup(g.id)}
+                  />
+                  {groupOn && g.options.length > 0 ? (
+                    <div className="mt-2 ml-6 grid gap-1.5 sm:grid-cols-2">
+                      {g.options.map((opt) => {
+                        const oid = opt.id;
+                        if (!oid) return null;
+                        return (
+                          <Checkbox
+                            key={oid}
+                            label={
+                              opt.price > 0
+                                ? `${opt.name} (+${opt.price})`
+                                : opt.name
+                            }
+                            checked={selectedOpts.includes(oid)}
+                            onChange={() => toggleOption(g.id, oid)}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
           {!customs.data?.length && (
             <p className="text-sm text-[var(--muted-foreground)]">
