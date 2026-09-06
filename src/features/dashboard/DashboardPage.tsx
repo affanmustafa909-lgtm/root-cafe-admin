@@ -1,10 +1,11 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
   CircleCheck,
   Clock3,
+  Filter,
   RefreshCw,
   ShoppingBag,
   TrendingUp,
@@ -19,6 +20,7 @@ import {
   Badge,
   Button,
   ErrorState,
+  Input,
   MetricCard,
   Skeleton,
 } from '@/shared/ui';
@@ -42,7 +44,10 @@ type Summary = {
   counts?: Partial<Record<OrderStatus, number>>;
   recentOrders?: Record<string, unknown>[];
   todayRevenue?: number | null;
+  period?: 'day' | 'month';
 };
+
+type PeriodMode = 'day' | 'month';
 
 const statuses: OrderStatus[] = [
   'RECEIVED',
@@ -57,6 +62,18 @@ const statusColors: Record<OrderStatus, string> = {
   READY_FOR_PICKUP: '#E02A3A',
   COMPLETED: '#94A3B8',
 };
+
+function todayIso() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function monthIso() {
+  return todayIso().slice(0, 7);
+}
 
 function greeting() {
   const h = new Date().getHours();
@@ -112,15 +129,40 @@ function popularFromOrders(orders: Order[]) {
     }));
 }
 
+function formatPeriodLabel(mode: PeriodMode, date: string, month: string) {
+  if (mode === 'month') {
+    const [y, m] = month.split('-').map(Number);
+    return new Intl.DateTimeFormat('en-IE', {
+      month: 'long',
+      year: 'numeric',
+    }).format(new Date(y, m - 1, 1));
+  }
+  const [y, m, d] = date.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-IE', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(new Date(y, m - 1, d));
+}
+
 export function DashboardPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [liveFlash, setLiveFlash] = useState<string | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [mode, setMode] = useState<PeriodMode>('day');
+  const [date, setDate] = useState(todayIso);
+  const [month, setMonth] = useState(monthIso);
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  const queryParams = mode === 'month' ? { month } : { date };
 
   const q = useQuery({
-    queryKey: ['dashboard'],
+    queryKey: ['dashboard', mode, mode === 'month' ? month : date],
     queryFn: async () => {
-      const raw = dataOf<Summary>(await api.get('/admin/dashboard/summary'));
+      const raw = dataOf<Summary>(
+        await api.get('/admin/dashboard/summary', { params: queryParams }),
+      );
       return {
         ...raw,
         recentOrders: raw.recentOrders?.map((o) => mapOrder(o)) ?? [],
@@ -136,6 +178,24 @@ export function DashboardPage() {
 
   const { connected } = useSocket(onLive);
 
+  useEffect(() => {
+    if (!filterOpen) return;
+    const onPointer = (e: MouseEvent) => {
+      if (!filterRef.current?.contains(e.target as Node)) {
+        setFilterOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFilterOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [filterOpen]);
+
   const activity = useMemo(
     () => hourBuckets(q.data?.recentOrders ?? []),
     [q.data?.recentOrders],
@@ -147,6 +207,10 @@ export function DashboardPage() {
   );
 
   const hasChartData = activity.some((b) => b.value > 0);
+  const periodLabel = formatPeriodLabel(mode, date, month);
+  const isToday = mode === 'day' && date === todayIso();
+  const isThisMonth = mode === 'month' && month === monthIso();
+  const filterActive = !isToday && !(mode === 'month' && isThisMonth);
 
   if (q.isLoading) {
     return (
@@ -170,7 +234,7 @@ export function DashboardPage() {
     return (
       <ErrorState
         title="Unable to load dashboard"
-        message="Something went wrong while fetching today’s summary."
+        message="Something went wrong while fetching the summary."
         onRetry={() => void q.refetch()}
       />
     );
@@ -198,24 +262,31 @@ export function DashboardPage() {
   const sparkValues = activity.map((b) => b.value);
   const firstName = user?.name?.split(' ')[0] || 'team';
   const showReporting = Boolean(user?.features.reporting);
-  const todayLabel = new Intl.DateTimeFormat('en-IE', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  }).format(new Date());
+  const scopeHint =
+    mode === 'month'
+      ? isThisMonth
+        ? 'This month'
+        : periodLabel
+      : isToday
+        ? 'Today'
+        : periodLabel;
 
   return (
     <div className="page-enter space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-semibold tracking-wider text-[var(--muted-foreground)] uppercase">
-            {todayLabel}
+            {periodLabel}
           </p>
           <h1 className="font-display mt-1 text-[1.85rem] font-semibold tracking-tight text-[var(--foreground)]">
             {greeting()}, {firstName}
           </h1>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            Today’s café activity at a glance
+            {mode === 'month'
+              ? `Café activity for ${periodLabel}`
+              : isToday
+                ? 'Today’s café activity at a glance'
+                : `Café activity for ${periodLabel}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -234,6 +305,101 @@ export function DashboardPage() {
               </span>
             )}
           </span>
+
+          <div className="relative" ref={filterRef}>
+            <Button
+              type="button"
+              variant={filterActive ? 'primary' : 'secondary'}
+              size="sm"
+              onClick={() => setFilterOpen((o) => !o)}
+              aria-expanded={filterOpen}
+              aria-haspopup="dialog"
+              aria-label="Filter by date or month"
+              title="Filter period"
+            >
+              <Filter size={14} aria-hidden />
+              Filter
+            </Button>
+            {filterOpen && (
+              <div
+                role="dialog"
+                aria-label="Dashboard period filter"
+                className="absolute top-full right-0 z-30 mt-2 w-[17.5rem] rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-[var(--shadow-md)]"
+              >
+                <div className="flex gap-1 rounded-lg bg-[var(--muted)] p-1">
+                  <button
+                    type="button"
+                    className={`flex-1 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors ${
+                      mode === 'day'
+                        ? 'bg-[var(--card)] text-[var(--foreground)] shadow-[var(--shadow-xs)]'
+                        : 'text-[var(--muted-foreground)]'
+                    }`}
+                    onClick={() => setMode('day')}
+                  >
+                    Day
+                  </button>
+                  <button
+                    type="button"
+                    className={`flex-1 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors ${
+                      mode === 'month'
+                        ? 'bg-[var(--card)] text-[var(--foreground)] shadow-[var(--shadow-xs)]'
+                        : 'text-[var(--muted-foreground)]'
+                    }`}
+                    onClick={() => setMode('month')}
+                  >
+                    Month
+                  </button>
+                </div>
+
+                <label className="mt-3 block">
+                  <span className="mb-1.5 block text-xs font-medium text-[var(--muted-foreground)]">
+                    {mode === 'month' ? 'Select month' : 'Select date'}
+                  </span>
+                  {mode === 'month' ? (
+                    <Input
+                      type="month"
+                      value={month}
+                      max={monthIso()}
+                      onChange={(e) => setMonth(e.target.value)}
+                      aria-label="Filter month"
+                    />
+                  ) : (
+                    <Input
+                      type="date"
+                      value={date}
+                      max={todayIso()}
+                      onChange={(e) => setDate(e.target.value)}
+                      aria-label="Filter date"
+                    />
+                  )}
+                </label>
+
+                <div className="mt-3 flex items-center justify-between gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setMode('day');
+                      setDate(todayIso());
+                      setMonth(monthIso());
+                      setFilterOpen(false);
+                    }}
+                  >
+                    Today
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setFilterOpen(false)}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
           <Button
             variant="secondary"
             size="sm"
@@ -254,7 +420,7 @@ export function DashboardPage() {
               value={
                 <AnimatedNumber value={revenue} format={(n) => money(n)} />
               }
-              hint="Completed today"
+              hint={`${scopeHint} · completed`}
               icon={Wallet}
               accent="gold"
               spark={<Sparkline values={sparkValues} />}
@@ -279,7 +445,7 @@ export function DashboardPage() {
             <MetricCard
               label="Completed"
               value={<AnimatedNumber value={completed} />}
-              hint="Fulfilled today"
+              hint={`Fulfilled · ${scopeHint.toLowerCase()}`}
               icon={CircleCheck}
               accent="green"
               delay={120}
@@ -306,7 +472,7 @@ export function DashboardPage() {
             <MetricCard
               label="Completed"
               value={<AnimatedNumber value={completed} />}
-              hint="Fulfilled today"
+              hint={`Fulfilled · ${scopeHint.toLowerCase()}`}
               icon={CircleCheck}
               accent="green"
               delay={80}
@@ -330,7 +496,7 @@ export function DashboardPage() {
               Kitchen pipeline
             </h2>
             <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
-              {totalOrders} order{totalOrders === 1 ? '' : 's'} today
+              {totalOrders} order{totalOrders === 1 ? '' : 's'} · {scopeHint}
             </p>
           </div>
 
@@ -381,7 +547,7 @@ export function DashboardPage() {
                 Orders by hour
               </h2>
               <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
-                Volume across today’s service window
+                Volume across the service window · {scopeHint}
               </p>
             </div>
             {hasChartData && (
@@ -396,7 +562,7 @@ export function DashboardPage() {
 
           {!hasChartData ? (
             <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted)]/40 py-16 text-sm text-[var(--muted-foreground)]">
-              Orders will appear here as they come in
+              Orders will appear here for this period
             </div>
           ) : (
             <div className="mt-auto">
@@ -410,10 +576,10 @@ export function DashboardPage() {
         <section className="card p-5 sm:p-6 lg:col-span-4">
           <div className="mb-5">
             <h2 className="text-sm font-semibold text-[var(--foreground)]">
-              Popular today
+              Popular
             </h2>
             <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
-              Top items from recent orders
+              Top items · {scopeHint}
             </p>
           </div>
           {!popular.length ? (
@@ -432,7 +598,7 @@ export function DashboardPage() {
                 Recent orders
               </h2>
               <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
-                Latest activity
+                {scopeHint}
               </p>
             </div>
             <Link
@@ -447,10 +613,10 @@ export function DashboardPage() {
           {!d.recentOrders?.length ? (
             <div className="flex min-h-40 flex-col items-center justify-center px-6 py-12 text-center">
               <p className="text-sm font-medium text-[var(--foreground)]">
-                No orders yet
+                No orders in this period
               </p>
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                New orders will show up here in real time.
+                Try another date or month from Filter.
               </p>
             </div>
           ) : (
