@@ -113,7 +113,8 @@ export function HomeBannerPage() {
             </p>
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">
               Upload a landscape photo only (no in-image text needed). The app
-              crops with cover to fill the banner box.
+              crops with cover to fill the banner box. Re-upload after this
+              update for sharper quality (up to 1600px wide).
             </p>
           </div>
         </div>

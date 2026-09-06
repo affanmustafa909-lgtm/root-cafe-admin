@@ -58,8 +58,8 @@ export function OrderDetailPage() {
       ),
   });
   const m = useMutation({
-    mutationFn: (status: OrderStatus) =>
-      api.patch(`/admin/orders/${id}/status`, { status }),
+    mutationFn: (payload: { status: OrderStatus; notes?: string }) =>
+      api.patch(`/admin/orders/${id}/status`, payload),
     onSuccess: () => {
       toast('Order updated');
       void qc.invalidateQueries({ queryKey: ['order', id] });
@@ -102,6 +102,10 @@ export function OrderDetailPage() {
   const o = q.data!;
   const action = acts[o.status];
   const current = steps.findIndex((s) => s.status === o.status);
+  const canDecline =
+    o.status === 'RECEIVED' ||
+    o.status === 'PREPARING' ||
+    o.status === 'READY_FOR_PICKUP';
 
   return (
     <div className="page-enter space-y-6">
@@ -168,12 +172,37 @@ export function OrderDetailPage() {
           <Button
             loading={m.isPending}
             disabled={m.isPending}
-            onClick={() => m.mutate(action.status)}
+            onClick={() => m.mutate({ status: action.status })}
           >
             {action.label}
           </Button>
         )}
+        {canDecline && (
+          <Button
+            variant="secondary"
+            loading={m.isPending}
+            disabled={m.isPending}
+            onClick={() => {
+              const reason = window.prompt(
+                'Decline reason (optional) — e.g. sold out, closing early',
+              );
+              if (reason === null) return;
+              m.mutate({
+                status: 'DECLINED',
+                notes: reason.trim() || undefined,
+              });
+            }}
+          >
+            Decline order
+          </Button>
+        )}
       </div>
+
+      {o.status === 'DECLINED' && o.notes ? (
+        <p className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3 text-sm text-[var(--muted-foreground)]">
+          Reason: {o.notes}
+        </p>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="card p-5">

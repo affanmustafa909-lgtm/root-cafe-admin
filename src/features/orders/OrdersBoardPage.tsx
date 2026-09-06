@@ -10,6 +10,7 @@ import {
   PackageCheck,
   Search,
   ShoppingBag,
+  XCircle,
 } from 'lucide-react';
 import { api, dataOf, errorMessage } from '@/shared/api/client';
 import type { Order, OrderStatus } from '@/shared/types';
@@ -37,6 +38,7 @@ const cols: OrderStatus[] = [
   'PREPARING',
   'READY_FOR_PICKUP',
   'COMPLETED',
+  'DECLINED',
 ];
 
 const next: Partial<
@@ -75,6 +77,12 @@ const columnMeta: Record<
     hint: 'Fulfilled',
     icon: CheckCircle2,
   },
+  DECLINED: {
+    label: 'Declined',
+    dot: 'bg-rose-400',
+    hint: 'Could not fulfil',
+    icon: XCircle,
+  },
 };
 
 function itemCount(order: Order) {
@@ -98,14 +106,20 @@ function OrderCard({
   action,
   busy,
   onAdvance,
+  onDecline,
 }: {
   order: Order;
   action?: { label: string };
   busy: boolean;
   onAdvance?: () => void;
+  onDecline?: () => void;
 }) {
   const count = itemCount(order);
   const paid = (order.paymentStatus || '').toUpperCase() === 'PAID';
+  const canDecline =
+    order.status === 'RECEIVED' ||
+    order.status === 'PREPARING' ||
+    order.status === 'READY_FOR_PICKUP';
 
   return (
     <article className="group rounded-xl border border-[var(--border)] bg-[var(--card)] p-3.5 shadow-[var(--shadow-xs)] transition-[border-color,box-shadow] hover:border-[color-mix(in_srgb,var(--primary)_22%,var(--border))] hover:shadow-[var(--shadow-sm)]">
@@ -147,18 +161,35 @@ function OrderCard({
         </Badge>
       </div>
 
-      {action && onAdvance && (
-        <Button
-          className="mt-3 w-full"
-          size="sm"
-          variant={order.status === 'READY_FOR_PICKUP' ? 'primary' : 'secondary'}
-          loading={busy}
-          onClick={onAdvance}
-        >
-          {action.label}
-          <ArrowRight size={14} aria-hidden />
-        </Button>
-      )}
+      {(action && onAdvance) || (canDecline && onDecline) ? (
+        <div className="mt-3 flex flex-col gap-2">
+          {action && onAdvance ? (
+            <Button
+              className="w-full"
+              size="sm"
+              variant={
+                order.status === 'READY_FOR_PICKUP' ? 'primary' : 'secondary'
+              }
+              loading={busy}
+              onClick={onAdvance}
+            >
+              {action.label}
+              <ArrowRight size={14} aria-hidden />
+            </Button>
+          ) : null}
+          {canDecline && onDecline ? (
+            <Button
+              className="w-full"
+              size="sm"
+              variant="ghost"
+              loading={busy}
+              onClick={onDecline}
+            >
+              Decline order
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </article>
   );
 }
@@ -188,8 +219,15 @@ export function OrdersBoardPage() {
   const { connected } = useSocket(refresh);
 
   const m = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: OrderStatus }) =>
-      api.patch(`/admin/orders/${id}/status`, { status }),
+    mutationFn: ({
+      id,
+      status,
+      notes,
+    }: {
+      id: string;
+      status: OrderStatus;
+      notes?: string;
+    }) => api.patch(`/admin/orders/${id}/status`, { status, notes }),
     onMutate: async ({ id, status }) => {
       setAdvancingId(id);
       await qc.cancelQueries({ queryKey: ['orders'] });
@@ -361,7 +399,7 @@ export function OrdersBoardPage() {
           message="Try another search term."
         />
       ) : (
-        <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-5">
           {cols.map((status) => {
             const meta = columnMeta[status];
             const Icon = meta.icon;
@@ -412,6 +450,21 @@ export function OrdersBoardPage() {
                                   id: o.id,
                                   status: action.status,
                                 })
+                            : undefined
+                        }
+                        onDecline={
+                          !advancingId
+                            ? () => {
+                                const reason = window.prompt(
+                                  'Decline reason (optional) — e.g. sold out, closing early',
+                                );
+                                if (reason === null) return;
+                                m.mutate({
+                                  id: o.id,
+                                  status: 'DECLINED',
+                                  notes: reason.trim() || undefined,
+                                });
+                              }
                             : undefined
                         }
                       />

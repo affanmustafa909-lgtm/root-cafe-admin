@@ -3,7 +3,8 @@ export type OrderStatus =
   | 'RECEIVED'
   | 'PREPARING'
   | 'READY_FOR_PICKUP'
-  | 'COMPLETED';
+  | 'COMPLETED'
+  | 'DECLINED';
 export interface User {
   id: string;
   name: string;
@@ -30,6 +31,7 @@ export interface Order {
   total: number;
   paymentStatus?: string;
   paymentMethod?: string;
+  notes?: string | null;
   createdAt: string;
 }
 export interface Category {

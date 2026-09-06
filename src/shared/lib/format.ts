@@ -35,6 +35,8 @@ export const orderStatusTone = (status?: string): StatusTone => {
       return 'green';
     case 'COMPLETED':
       return 'gray';
+    case 'DECLINED':
+      return 'red';
     default:
       return 'gray';
   }

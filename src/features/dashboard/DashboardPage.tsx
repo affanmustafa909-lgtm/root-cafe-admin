@@ -54,6 +54,7 @@ const statuses: OrderStatus[] = [
   'PREPARING',
   'READY_FOR_PICKUP',
   'COMPLETED',
+  'DECLINED',
 ];
 
 const statusColors: Record<OrderStatus, string> = {
@@ -61,6 +62,7 @@ const statusColors: Record<OrderStatus, string> = {
   PREPARING: '#162947',
   READY_FOR_PICKUP: '#E02A3A',
   COMPLETED: '#94A3B8',
+  DECLINED: '#F87171',
 };
 
 function todayIso() {
