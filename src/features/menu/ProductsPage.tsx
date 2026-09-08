@@ -41,6 +41,20 @@ export function ProductsPage() {
       ),
   });
 
+  const cakeFeatured = useQuery({
+    queryKey: ['cake-history'],
+    queryFn: async () => {
+      const raw = dataOf<
+        Array<{ productId?: string | null; isActive?: boolean }> | null
+      >(await api.get('/admin/cake-of-day/history'));
+      const ids = new Set<string>();
+      for (const row of Array.isArray(raw) ? raw : []) {
+        if (row?.isActive !== false && row.productId) ids.add(row.productId);
+      }
+      return ids;
+    },
+  });
+
   const categories = useQuery({
     queryKey: ['categories'],
     queryFn: async () =>
@@ -256,7 +270,9 @@ export function ProductsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((p) => (
+              {rows.map((p) => {
+                const isCakeOfDay = cakeFeatured.data?.has(p.id) ?? false;
+                return (
                 <tr key={p.id}>
                   <td>
                     <div className="flex items-center gap-3">
@@ -282,9 +298,14 @@ export function ProductsPage() {
                       >
                         {p.name.slice(0, 2).toUpperCase()}
                       </span>
-                      <span className="font-semibold text-[var(--foreground)]">
-                        {p.name}
-                      </span>
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="font-semibold text-[var(--foreground)]">
+                          {p.name}
+                        </span>
+                        {isCakeOfDay ? (
+                          <Badge tone="amber">Cake of the Day</Badge>
+                        ) : null}
+                      </div>
                     </div>
                   </td>
                   <td className="text-[var(--muted-foreground)]">
@@ -292,7 +313,9 @@ export function ProductsPage() {
                   </td>
                   <td className="font-semibold">{money(p.price)}</td>
                   <td>
-                    {p.discountPercent && p.discountPercent > 0 ? (
+                    {isCakeOfDay ? (
+                      <Badge tone="amber">Cake of the Day</Badge>
+                    ) : p.discountPercent && p.discountPercent > 0 ? (
                       <Badge tone="red">{p.discountPercent}% OFF</Badge>
                     ) : p.isTopSale ? (
                       <Badge tone="blue">TOP SALE</Badge>
@@ -341,7 +364,8 @@ export function ProductsPage() {
                     </Button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
