@@ -41,19 +41,23 @@ export function ProductsPage() {
       ),
   });
 
-  const cakeFeatured = useQuery({
+  const cakeHistory = useQuery({
     queryKey: ['cake-history'],
     queryFn: async () => {
       const raw = dataOf<
         Array<{ productId?: string | null; isActive?: boolean }> | null
       >(await api.get('/admin/cake-of-day/history'));
-      const ids = new Set<string>();
-      for (const row of Array.isArray(raw) ? raw : []) {
-        if (row?.isActive !== false && row.productId) ids.add(row.productId);
-      }
-      return ids;
+      return Array.isArray(raw) ? raw.filter(Boolean) : [];
     },
   });
+
+  const cakeProductIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const row of cakeHistory.data ?? []) {
+      if (row?.isActive !== false && row.productId) ids.add(row.productId);
+    }
+    return ids;
+  }, [cakeHistory.data]);
 
   const categories = useQuery({
     queryKey: ['categories'],
@@ -271,7 +275,7 @@ export function ProductsPage() {
             </thead>
             <tbody>
               {rows.map((p) => {
-                const isCakeOfDay = cakeFeatured.data?.has(p.id) ?? false;
+                const isCakeOfDay = cakeProductIds.has(p.id);
                 return (
                 <tr key={p.id}>
                   <td>
