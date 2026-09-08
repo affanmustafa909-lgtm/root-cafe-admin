@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,6 +11,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  ConfirmDialog,
   EmptyState,
   ErrorState,
   Input,
@@ -55,6 +57,7 @@ const emptyForm: Form = {
 export function CakeOfDayPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const [del, setDel] = useState<CakeRow | null>(null);
 
   const history = useQuery({
     queryKey: ['cake-history'],
@@ -106,6 +109,18 @@ export function CakeOfDayPage() {
       api.patch(`/admin/cake-of-day/${id}/deactivate`),
     onSuccess: () => {
       toast('Removed from featured');
+      void qc.invalidateQueries({ queryKey: ['cake-history'] });
+      void qc.invalidateQueries({ queryKey: ['cake'] });
+      void qc.invalidateQueries({ queryKey: ['products'] });
+    },
+    onError: (e) => toast(errorMessage(e), 'error'),
+  });
+
+  const destroy = useMutation({
+    mutationFn: (id: string) => api.delete(`/admin/cake-of-day/${id}`),
+    onSuccess: () => {
+      toast('Cake deleted');
+      setDel(null);
       void qc.invalidateQueries({ queryKey: ['cake-history'] });
       void qc.invalidateQueries({ queryKey: ['cake'] });
       void qc.invalidateQueries({ queryKey: ['products'] });
@@ -276,7 +291,7 @@ export function CakeOfDayPage() {
                           <Badge tone="green">Active</Badge>
                         )}
                       </td>
-                      <td className="text-right">
+                      <td className="space-x-2 whitespace-nowrap text-right">
                         {c.isActive !== false ? (
                           <Button
                             type="button"
@@ -287,11 +302,16 @@ export function CakeOfDayPage() {
                           >
                             Remove
                           </Button>
-                        ) : (
-                          <span className="text-xs text-[var(--muted-foreground)]">
-                            —
-                          </span>
-                        )}
+                        ) : null}
+                        <Button
+                          type="button"
+                          variant="danger"
+                          size="sm"
+                          disabled={destroy.isPending}
+                          onClick={() => setDel(c)}
+                        >
+                          Delete
+                        </Button>
                       </td>
                     </tr>
                   );
@@ -301,6 +321,16 @@ export function CakeOfDayPage() {
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={!!del}
+        message={`Delete ${del?.name || del?.title || 'this cake'} from the listing? The linked product stays in Products unless you delete it there.`}
+        onCancel={() => setDel(null)}
+        onConfirm={() => {
+          if (del) destroy.mutate(del.id);
+        }}
+        busy={destroy.isPending}
+      />
     </div>
   );
 }
