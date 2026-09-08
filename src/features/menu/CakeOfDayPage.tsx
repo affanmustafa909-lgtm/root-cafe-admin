@@ -30,8 +30,23 @@ export function CakeOfDayPage() {
   const { toast } = useToast();
   const q = useQuery({
     queryKey: ['cake'],
-    queryFn: async () =>
-      dataOf<Partial<Form>>(await api.get('/admin/cake-of-day')),
+    queryFn: async () => {
+      const raw = dataOf<Record<string, unknown>>(
+        await api.get('/admin/cake-of-day'),
+      );
+      if (!raw) return null;
+      return {
+        id: raw.id as string | undefined,
+        name: String(raw.name ?? raw.title ?? ''),
+        description: String(raw.description ?? ''),
+        price: Number(raw.price ?? 0),
+        date: String(raw.date ?? new Date().toISOString().slice(0, 10)).slice(
+          0,
+          10,
+        ),
+        available: raw.available !== false && raw.isAvailable !== false,
+      };
+    },
   });
   const { register, handleSubmit } = useForm<Form>({
     resolver: zodResolver(schema),
@@ -46,13 +61,15 @@ export function CakeOfDayPage() {
   });
 
   const save = useMutation({
-    mutationFn: (v: Form) => {
+    mutationFn: async (v: Form) => {
       const f = new FormData();
-      Object.entries(v).forEach(([k, val]) => {
-        const file = k === 'image' ? (val as FileList)?.[0] : null;
-        if (file) f.append(k, file);
-        else if (k !== 'image') f.append(k, String(val));
-      });
+      f.append('name', v.name);
+      f.append('description', v.description ?? '');
+      f.append('price', String(v.price));
+      f.append('date', v.date);
+      f.append('available', v.available ? 'true' : 'false');
+      const file = (v.image as FileList | undefined)?.[0];
+      if (file) f.append('image', file);
       return api.put('/admin/cake-of-day', f);
     },
     onSuccess: () => {
