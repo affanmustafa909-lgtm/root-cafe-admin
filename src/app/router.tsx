@@ -19,6 +19,7 @@ import { SettingsPage } from '@/features/settings/SettingsPage';
 import { PickupSettingsPage } from '@/features/settings/PickupSettingsPage';
 import { OnboardingPage } from '@/features/settings/OnboardingPage';
 import { StampCardSettingsPage } from '@/features/settings/StampCardSettingsPage';
+import { LegalSettingsPage } from '@/features/settings/LegalSettingsPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -52,6 +53,7 @@ export const router = createBrowserRouter([
               { path: '/settings/onboarding', element: <OnboardingPage /> },
               { path: '/settings/pickup', element: <PickupSettingsPage /> },
               { path: '/settings/stamp-card', element: <StampCardSettingsPage /> },
+              { path: '/settings/legal', element: <LegalSettingsPage /> },
               { path: '/customers', element: <CustomersPage /> },
               { path: '/customers/:id', element: <CustomerDetailPage /> },
               { path: '/reports', element: <ReportsPage /> },

@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   Stamp,
   Store,
+  Scale,
   UserRound,
   type LucideIcon,
 } from 'lucide-react';
@@ -53,6 +54,13 @@ const cafeOps: ControlCard[] = [
     description: 'Loyalty stamps and free-drink rewards.',
     icon: Stamp,
     well: 'icon-well-amber',
+  },
+  {
+    to: '/settings/legal',
+    label: 'Legal pages',
+    description: 'Impressum, privacy policy, and terms (AGB).',
+    icon: Scale,
+    well: 'icon-well-navy',
   },
   {
     to: '/settings/onboarding',

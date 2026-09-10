@@ -17,6 +17,7 @@ import {
   ImageIcon,
   Clock3,
   Stamp,
+  Scale,
   ChevronDown,
   type LucideIcon,
 } from 'lucide-react';
@@ -105,6 +106,7 @@ function SidebarPanel({
     { to: '/settings', label: 'Overview', icon: Settings, end: true },
     { to: '/settings/pickup', label: 'Pickup schedule', icon: Clock3 },
     { to: '/settings/stamp-card', label: 'Stamp card', icon: Stamp },
+    { to: '/settings/legal', label: 'Legal pages', icon: Scale },
     { to: '/settings/onboarding', label: 'Get Started', icon: ImageIcon },
   ];
 

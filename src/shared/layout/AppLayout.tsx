@@ -20,6 +20,7 @@ const titles: Record<string, string> = {
   '/menu/home-banner': 'Home Banner',
   '/settings/pickup': 'Pickup schedule',
   '/settings/stamp-card': 'Stamp card',
+  '/settings/legal': 'Legal pages',
   '/settings/onboarding': 'Get Started',
   '/settings': 'Settings',
   '/reports': 'Reports',
