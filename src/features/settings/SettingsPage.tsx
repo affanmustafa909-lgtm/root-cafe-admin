@@ -58,7 +58,7 @@ const cafeOps: ControlCard[] = [
   {
     to: '/settings/legal',
     label: 'Legal pages',
-    description: 'Impressum, privacy policy, and terms (AGB).',
+    description: 'Café contact, Impressum, GDPR privacy, and AGB.',
     icon: Scale,
     well: 'icon-well-navy',
   },
