@@ -48,6 +48,10 @@ export function mapProduct(raw: Record<string, unknown>) {
     active: raw.isActive !== false,
     price: Number(raw.price ?? 0),
     isTopSale: Boolean(raw.isTopSale),
+    stampsAwarded:
+      raw.stampsAwarded === null || raw.stampsAwarded === undefined
+        ? 1
+        : Math.max(0, Number(raw.stampsAwarded)),
     discountPercent:
       raw.discountPercent === null || raw.discountPercent === undefined
         ? null

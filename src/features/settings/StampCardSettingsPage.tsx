@@ -82,7 +82,7 @@ export function StampCardSettingsPage() {
     <div className="page-enter space-y-6">
       <PageHeader
         title="Stamp card"
-        description="Digital loyalty card. Each drink in a completed order adds a stamp; after the required stamps, the next drink is free."
+        description="Digital loyalty card. Each product awards the stamps set on that product (default 1 per unit). After the required stamps, the next drink is free."
       />
 
       <section className="card max-w-xl space-y-5 p-6">
@@ -94,9 +94,9 @@ export function StampCardSettingsPage() {
             <h2 className="section-title">Loyalty rules</h2>
             <p className="mt-1 text-sm text-[var(--muted-foreground)]">
               Default: collect {required} stamps → drink #{required + 1} is free.
-              An order of two drinks earns two stamps. Stamps apply when staff
-              marks the order Complete. A redeemed free drink does not earn a
-              stamp; other drinks in that order still do.
+              Stamps come from each product’s “Stamp card stamps” value ×
+              quantity. A free redeemed drink does not earn its stamps; other
+              items in that order still do.
             </p>
           </div>
         </div>

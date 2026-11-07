@@ -33,6 +33,7 @@ const schema = z.object({
   active: z.boolean(),
   soldOut: z.boolean(),
   isTopSale: z.boolean(),
+  stampsAwarded: z.coerce.number().int().min(0).max(20),
   discountPercent: z.preprocess(
     (v) => (v === '' || v === null || v === undefined ? null : Number(v)),
     z.number().min(0).max(50).nullable(),
@@ -147,6 +148,7 @@ export function ProductFormPage() {
       active: true,
       soldOut: false,
       isTopSale: false,
+      stampsAwarded: 1,
       discountPercent: null,
       compareAtPrice: null,
     },
@@ -168,6 +170,7 @@ export function ProductFormPage() {
       active: product.data.active !== false,
       soldOut: !!product.data.soldOut,
       isTopSale: !!product.data.isTopSale,
+      stampsAwarded: product.data.stampsAwarded ?? 1,
       discountPercent: product.data.discountPercent ?? null,
       compareAtPrice: product.data.compareAtPrice ?? null,
     });
@@ -264,6 +267,7 @@ export function ProductFormPage() {
       f.append('active', v.active ? 'true' : 'false');
       f.append('soldOut', v.soldOut ? 'true' : 'false');
       f.append('isTopSale', v.isTopSale ? 'true' : 'false');
+      f.append('stampsAwarded', String(v.stampsAwarded));
       f.append(
         'discountPercent',
         v.discountPercent === null || v.discountPercent === undefined
@@ -393,6 +397,28 @@ export function ProductFormPage() {
               {errors.categoryId && (
                 <small className="mt-1 block text-[var(--destructive)]">
                   Select a category
+                </small>
+              )}
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="label">Stamp card stamps</span>
+              <Input
+                type="number"
+                min={0}
+                max={20}
+                step={1}
+                {...register('stampsAwarded')}
+                aria-invalid={!!errors.stampsAwarded}
+              />
+              {errors.stampsAwarded ? (
+                <small className="mt-1 block text-[var(--destructive)]">
+                  Enter 0–20 stamps per unit
+                </small>
+              ) : (
+                <small className="mt-1 block text-[var(--muted-foreground)]">
+                  Stamps earned per unit when the order is completed (e.g. 2 =
+                  two stamps for one of this product). Use 0 for items that
+                  should not earn stamps.
                 </small>
               )}
             </label>

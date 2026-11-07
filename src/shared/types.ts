@@ -54,6 +54,8 @@ export interface Product {
   soldOut?: boolean;
   active?: boolean;
   isTopSale?: boolean;
+  /** Stamps earned per unit when this product’s order is completed. */
+  stampsAwarded?: number;
   discountPercent?: number | null;
   compareAtPrice?: number | null;
   createdAt?: string;
