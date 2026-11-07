@@ -68,7 +68,7 @@ function showBrowserNotification(title: string, body: string, orderId?: string) 
       body,
       tag: orderId ? `order-${orderId}` : 'new-order',
       renotify: true,
-    });
+    } as NotificationOptions);
     n.onclick = () => {
       window.focus();
       n.close();
