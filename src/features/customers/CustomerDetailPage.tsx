@@ -1,7 +1,20 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Mail, Phone, ShoppingBag, Wallet } from 'lucide-react';
-import { api, dataOf } from '@/shared/api/client';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+import {
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Mail,
+  Phone,
+  ShoppingBag,
+  Wallet,
+} from 'lucide-react';
+import { api, dataOf, errorMessage } from '@/shared/api/client';
 import { mediaUrl } from '@/shared/lib/media';
 import type { Order } from '@/shared/types';
 import { mapOrder } from '@/shared/lib/mappers';
@@ -11,9 +24,11 @@ import {
   Button,
   EmptyState,
   ErrorState,
+  Input,
   MetricCard,
   PageHeader,
   Skeleton,
+  useToast,
 } from '@/shared/ui';
 import {
   dateOnly,
@@ -22,6 +37,18 @@ import {
   orderStatusTone,
   titleCase,
 } from '@/shared/lib/format';
+
+const resetPasswordSchema = z
+  .object({
+    password: z.string().min(8, 'At least 8 characters'),
+    confirmPassword: z.string().min(1, 'Confirm the password'),
+  })
+  .refine((v) => v.password === v.confirmPassword, {
+    path: ['confirmPassword'],
+    message: 'Passwords do not match',
+  });
+
+type ResetPasswordForm = z.infer<typeof resetPasswordSchema>;
 
 type CustomerDetail = {
   id: string;
@@ -36,6 +63,20 @@ type CustomerDetail = {
 
 export function CustomerDetailPage() {
   const { id } = useParams();
+  const { toast } = useToast();
+  const [showPassword, setShowPassword] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [lastSetPassword, setLastSetPassword] = useState<string | null>(null);
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<ResetPasswordForm>({
+    resolver: zodResolver(resetPasswordSchema),
+    defaultValues: { password: '', confirmPassword: '' },
+  });
+
   const q = useQuery({
     queryKey: ['customer', id],
     queryFn: async () => {
@@ -167,6 +208,120 @@ export function CustomerDetailPage() {
           />
         </section>
       </div>
+
+      <section className="card p-5">
+        <div className="flex items-start gap-3">
+          <span className="icon-well icon-well-navy size-9 shrink-0">
+            <KeyRound size={16} aria-hidden />
+          </span>
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--foreground)]">
+              Password help
+            </h2>
+            <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
+              Set a temporary password if this customer forgot theirs. The old
+              password cannot be recovered — share the new one with them
+              securely.
+            </p>
+          </div>
+        </div>
+
+        {lastSetPassword ? (
+          <div
+            className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2.5 text-sm"
+            role="status"
+          >
+            <p className="font-medium text-[var(--foreground)]">
+              Temporary password set
+            </p>
+            <p className="mt-1 text-[var(--muted-foreground)]">
+              Tell the customer to sign in with:{' '}
+              <code className="rounded bg-[var(--background)] px-1.5 py-0.5 font-mono text-[var(--foreground)]">
+                {lastSetPassword}
+              </code>
+            </p>
+          </div>
+        ) : null}
+
+        {formError ? (
+          <div
+            className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700"
+            role="alert"
+          >
+            {formError}
+          </div>
+        ) : null}
+
+        <form
+          className="mt-4 space-y-4"
+          onSubmit={handleSubmit(async (v) => {
+            setFormError('');
+            setLastSetPassword(null);
+            try {
+              dataOf(
+                await api.post(`/admin/customers/${c.id}/reset-password`, {
+                  password: v.password,
+                }),
+              );
+              setLastSetPassword(v.password);
+              reset({ password: '', confirmPassword: '' });
+              toast('Temporary password set');
+            } catch (e) {
+              setFormError(errorMessage(e));
+            }
+          })}
+          noValidate
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="label">Temporary password</span>
+              <div className="relative">
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  className="pr-11"
+                  aria-invalid={!!errors.password}
+                  {...register('password')}
+                />
+                <button
+                  type="button"
+                  className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-1.5 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                  onClick={() => setShowPassword((s) => !s)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              {errors.password ? (
+                <small className="mt-1 block text-[var(--destructive)]">
+                  {errors.password.message}
+                </small>
+              ) : (
+                <small className="mt-1 block text-[var(--muted-foreground)]">
+                  Min. 8 characters
+                </small>
+              )}
+            </label>
+            <label className="block">
+              <span className="label">Confirm password</span>
+              <Input
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                aria-invalid={!!errors.confirmPassword}
+                {...register('confirmPassword')}
+              />
+              {errors.confirmPassword ? (
+                <small className="mt-1 block text-[var(--destructive)]">
+                  {errors.confirmPassword.message}
+                </small>
+              ) : null}
+            </label>
+          </div>
+          <Button type="submit" loading={isSubmitting}>
+            Set temporary password
+          </Button>
+        </form>
+      </section>
 
       <div>
         <h2 className="mb-3 text-lg font-bold tracking-tight text-[var(--foreground)]">
