@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { useMemo } from 'react';
+import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard,
   ClipboardList,
@@ -18,7 +18,8 @@ import {
   Clock3,
   Stamp,
   Scale,
-  ChevronDown,
+  Sparkles,
+  UserRound,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -59,14 +60,7 @@ function SidebarPanel({
   showCollapseToggle,
 }: PanelProps) {
   const { user, logout } = useAuth();
-  const location = useLocation();
   const manage = canManage(user?.role);
-  const onMenuPath = location.pathname.startsWith('/menu');
-  const onSettingsPath = location.pathname.startsWith('/settings');
-  const [menuForced, setMenuForced] = useState<boolean | null>(null);
-  const [settingsForced, setSettingsForced] = useState<boolean | null>(null);
-  const menuOpen = menuForced ?? onMenuPath;
-  const settingsOpen = settingsForced ?? onSettingsPath;
 
   const groups = useMemo<NavGroup[]>(() => {
     const main: NavItem[] = [
@@ -75,229 +69,179 @@ function SidebarPanel({
       ...(manage
         ? [{ to: '/customers', label: 'Customers', icon: Users }]
         : []),
+      { to: '/account', label: 'Account', icon: UserRound },
     ];
 
     const analytics: NavItem[] = manage
       ? [{ to: '/reports', label: 'Reports', icon: ChartNoAxesCombined }]
       : [];
 
+    const menu: NavItem[] = manage
+      ? [
+          { to: '/menu', label: 'Menu overview', icon: Utensils, end: true },
+          { to: '/menu/products', label: 'Products', icon: Package },
+          { to: '/menu/categories', label: 'Categories', icon: FolderTree },
+          {
+            to: '/menu/customizations',
+            label: 'Customizations',
+            icon: SlidersHorizontal,
+          },
+          { to: '/menu/cake-of-day', label: 'Cake of the Day', icon: CakeSlice },
+          { to: '/menu/home-banner', label: 'Home Banner', icon: ImageIcon },
+        ]
+      : [];
+
+    const settings: NavItem[] = manage
+      ? [
+          { to: '/settings', label: 'Settings overview', icon: Settings, end: true },
+          { to: '/settings/pickup', label: 'Pickup schedule', icon: Clock3 },
+          { to: '/settings/stamp-card', label: 'Stamp card', icon: Stamp },
+          { to: '/settings/legal', label: 'Legal pages', icon: Scale },
+          {
+            to: '/settings/onboarding',
+            label: 'Get Started',
+            icon: Sparkles,
+          },
+        ]
+      : [];
+
     return [
-      { id: 'main', label: 'Main', items: main },
+      { id: 'main', label: 'Operations', items: main },
       ...(analytics.length
         ? [{ id: 'analytics', label: 'Analytics', items: analytics }]
+        : []),
+      ...(menu.length ? [{ id: 'menu', label: 'Menu', items: menu }] : []),
+      ...(settings.length
+        ? [{ id: 'settings', label: 'Settings', items: settings }]
         : []),
     ];
   }, [manage]);
 
-  const menuChildren: NavItem[] = [
-    { to: '/menu', label: 'Overview', icon: Utensils, end: true },
-    { to: '/menu/products', label: 'Products', icon: Package },
-    { to: '/menu/categories', label: 'Categories', icon: FolderTree },
-    {
-      to: '/menu/customizations',
-      label: 'Customizations',
-      icon: SlidersHorizontal,
-    },
-    { to: '/menu/cake-of-day', label: 'Cake of the Day', icon: CakeSlice },
-    { to: '/menu/home-banner', label: 'Home Banner', icon: ImageIcon },
-  ];
-
-  const settingsChildren: NavItem[] = [
-    { to: '/settings', label: 'Overview', icon: Settings, end: true },
-    { to: '/settings/pickup', label: 'Pickup schedule', icon: Clock3 },
-    { to: '/settings/stamp-card', label: 'Stamp card', icon: Stamp },
-    { to: '/settings/legal', label: 'Legal pages', icon: Scale },
-    { to: '/settings/onboarding', label: 'Get Started', icon: ImageIcon },
-  ];
+  const collapsedItems = useMemo<NavItem[]>(() => {
+    const items: NavItem[] = [
+      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/orders', label: 'Orders', icon: ClipboardList },
+      { to: '/account', label: 'Account', icon: UserRound },
+    ];
+    if (manage) {
+      items.push(
+        { to: '/customers', label: 'Customers', icon: Users },
+        { to: '/reports', label: 'Reports', icon: ChartNoAxesCombined },
+        { to: '/menu/products', label: 'Products', icon: Package },
+        { to: '/settings', label: 'Settings', icon: Settings, end: true },
+      );
+    }
+    return items;
+  }, [manage]);
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `nav-link ${isActive ? 'nav-link-active' : ''} ${
-      collapsed ? 'justify-center px-0' : ''
+      collapsed ? 'nav-link-collapsed' : ''
     }`;
-
-  const renderExpandable = (
-    label: string,
-    Icon: LucideIcon,
-    open: boolean,
-    activePath: boolean,
-    onToggle: () => void,
-    children: NavItem[],
-  ) => (
-    <div>
-      <button
-        type="button"
-        className={`nav-link w-full ${
-          collapsed ? 'justify-center px-0' : ''
-        } ${activePath ? 'text-white' : ''}`}
-        onClick={onToggle}
-        aria-expanded={open}
-        title={collapsed ? label : undefined}
-      >
-        <span className="nav-link-icon">
-          <Icon size={collapsed ? 18 : 17} aria-hidden />
-        </span>
-        {!collapsed && (
-          <>
-            <span className="flex-1 truncate text-left">{label}</span>
-            <ChevronDown
-              size={14}
-              className={`shrink-0 text-[var(--sidebar-muted)] transition-transform duration-200 ${
-                open ? 'rotate-180' : ''
-              }`}
-              aria-hidden
-            />
-          </>
-        )}
-      </button>
-      {open && !collapsed && (
-        <div className="nav-sub space-y-0.5">
-          {children.map(({ to, label: childLabel, icon: ChildIcon, end }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={linkClass}
-              onClick={onNavigate}
-            >
-              <span className="nav-link-icon">
-                <ChildIcon size={15} aria-hidden />
-              </span>
-              <span className="truncate">{childLabel}</span>
-            </NavLink>
-          ))}
-        </div>
-      )}
-    </div>
-  );
 
   return (
     <aside
-      className={`flex h-full flex-col border-r border-white/[0.06] bg-[var(--sidebar)] text-[var(--sidebar-foreground)] transition-[width] duration-200 ${
+      className={`sidebar-shell flex h-full flex-col transition-[width] duration-200 ${
         collapsed ? 'w-[var(--sidebar-collapsed)]' : 'w-[var(--sidebar-width)]'
       }`}
     >
       <div
-        className={`flex shrink-0 items-center border-b border-white/[0.06] ${
+        className={`sidebar-brand flex shrink-0 items-center ${
           collapsed
-            ? 'h-auto flex-col gap-2 px-2 py-3'
-            : 'h-[var(--header-height)] gap-2.5 px-3'
+            ? 'flex-col gap-2 px-2 py-3.5'
+            : 'h-[var(--header-height)] gap-3 px-4'
         }`}
       >
-        <img
-          src="/logo.png"
-          alt=""
-          className={`shrink-0 object-contain ${collapsed ? 'size-10' : 'size-11'}`}
-        />
+        <div className="sidebar-logo-mark">
+          <img src="/logo.png" alt="" className="size-full object-contain" />
+        </div>
         {!collapsed && (
           <div className="min-w-0 flex-1">
-            <p className="font-display truncate text-[15px] leading-tight font-semibold tracking-tight">
+            <p className="font-display truncate text-[15px] leading-none font-semibold tracking-tight text-white">
               Roots Café
             </p>
-            <p className="mt-1 flex items-center gap-1" aria-hidden>
-              <span className="h-1 w-2 rotate-[-28deg] rounded-full bg-[var(--sky)]" />
-              <span className="h-1 w-2 rotate-[-28deg] rounded-full bg-[var(--navy)]" />
-              <span className="h-1 w-2 rotate-[-28deg] rounded-full bg-[var(--coral)]" />
+            <p className="mt-1.5 truncate text-[11px] leading-none tracking-wide text-white/45">
+              Staff console
             </p>
           </div>
         )}
         {showCollapseToggle && (
           <button
             type="button"
-            className="rounded-md p-1.5 text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-accent)] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+            className="sidebar-icon-btn"
             onClick={onToggleCollapse}
             aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {collapsed ? (
-              <PanelLeftOpen size={16} />
+              <PanelLeftOpen size={15} />
             ) : (
-              <PanelLeftClose size={16} />
+              <PanelLeftClose size={15} />
             )}
           </button>
         )}
       </div>
 
       <nav
-        className={`flex-1 overflow-y-auto py-3 ${collapsed ? 'px-2' : 'px-2.5'}`}
+        className={`sidebar-nav flex-1 overflow-y-auto ${
+          collapsed ? 'px-2 py-3' : 'px-3 py-4'
+        }`}
         aria-label="Main"
       >
-        <div className="space-y-4">
-          {groups.map((group) => (
-            <div key={group.id}>
-              {!collapsed && (
-                <p className="nav-section-label">{group.label}</p>
-              )}
-              <div className="space-y-0.5">
-                {group.items.map(({ to, label, icon: Icon }) => (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    title={collapsed ? label : undefined}
-                    className={linkClass}
-                    onClick={onNavigate}
-                  >
-                    <span className="nav-link-icon">
-                      <Icon size={collapsed ? 18 : 17} aria-hidden />
-                    </span>
-                    {!collapsed && <span className="truncate">{label}</span>}
-                  </NavLink>
-                ))}
-              </div>
-            </div>
-          ))}
-
-          {manage && (
-            <div>
-              {!collapsed && (
-                <p className="nav-section-label">Management</p>
-              )}
-              <div className="space-y-0.5">
-                {renderExpandable(
-                  'Menu',
-                  Utensils,
-                  menuOpen,
-                  onMenuPath,
-                  () => {
-                    if (collapsed) {
-                      onToggleCollapse();
-                      setMenuForced(true);
-                    } else {
-                      setMenuForced((prev) => !(prev ?? onMenuPath));
-                    }
-                  },
-                  menuChildren,
-                )}
-                {renderExpandable(
-                  'Settings',
-                  Settings,
-                  settingsOpen,
-                  onSettingsPath,
-                  () => {
-                    if (collapsed) {
-                      onToggleCollapse();
-                      setSettingsForced(true);
-                    } else {
-                      setSettingsForced((prev) => !(prev ?? onSettingsPath));
-                    }
-                  },
-                  settingsChildren,
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+        {collapsed ? (
+          <div className="space-y-1">
+            {collapsedItems.map(({ to, label, icon: Icon, end }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                title={label}
+                className={linkClass}
+                onClick={onNavigate}
+              >
+                <span className="nav-link-icon">
+                  <Icon size={18} strokeWidth={1.75} aria-hidden />
+                </span>
+              </NavLink>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {groups.map((group) => (
+              <section key={group.id} aria-labelledby={`nav-${group.id}`}>
+                <p className="nav-section-label" id={`nav-${group.id}`}>
+                  {group.label}
+                </p>
+                <div className="space-y-0.5">
+                  {group.items.map(({ to, label, icon: Icon, end }) => (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      end={end}
+                      className={linkClass}
+                      onClick={onNavigate}
+                    >
+                      <span className="nav-link-icon">
+                        <Icon size={16} strokeWidth={1.75} aria-hidden />
+                      </span>
+                      <span className="truncate">{label}</span>
+                    </NavLink>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
       </nav>
 
       <div
-        className={`shrink-0 border-t border-white/[0.06] ${
-          collapsed ? 'p-2' : 'p-2.5'
-        }`}
+        className={`sidebar-footer shrink-0 ${collapsed ? 'p-2' : 'p-3'}`}
       >
         {collapsed ? (
-          <div className="flex flex-col items-center gap-1.5">
+          <div className="flex flex-col items-center gap-2">
             <Avatar name={user?.name} size="sm" />
             <button
               type="button"
-              className="rounded-md p-1.5 text-[var(--sidebar-muted)] hover:bg-[var(--sidebar-accent)] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+              className="sidebar-icon-btn"
               onClick={() => void logout()}
               aria-label="Log out"
               title="Log out"
@@ -306,19 +250,19 @@ function SidebarPanel({
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-2.5 rounded-lg bg-[var(--sidebar-accent)] px-2 py-2">
+          <div className="sidebar-user">
             <Avatar name={user?.name} size="sm" />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] leading-tight font-semibold">
+              <p className="truncate text-[13px] leading-tight font-semibold text-white">
                 {user?.name}
               </p>
-              <p className="mt-0.5 truncate text-[11px] leading-none text-[var(--sidebar-muted)]">
-                {user?.role}
+              <p className="mt-0.5 truncate text-[11px] leading-none capitalize text-white/45">
+                {user?.role?.toLowerCase()}
               </p>
             </div>
             <button
               type="button"
-              className="rounded-md p-1.5 text-[var(--sidebar-muted)] hover:bg-white/8 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+              className="sidebar-icon-btn"
               onClick={() => void logout()}
               aria-label="Log out"
               title="Log out"
@@ -341,7 +285,7 @@ export function Sidebar({
   return (
     <>
       <div
-        className={`fixed inset-0 z-40 bg-black/40 transition-opacity lg:hidden ${
+        className={`fixed inset-0 z-40 bg-black/45 backdrop-blur-[2px] transition-opacity lg:hidden ${
           mobileOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
         onClick={onMobileClose}

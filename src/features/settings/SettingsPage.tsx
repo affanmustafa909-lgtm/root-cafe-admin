@@ -23,6 +23,7 @@ import {
   SIDEBAR_COLLAPSED_EVENT,
 } from '@/shared/layout/useSidebarState';
 import { Avatar, Badge, Button, PageHeader } from '@/shared/ui';
+import { AccountCredentialsForm } from './AccountCredentialsForm';
 
 const tabs = [
   { id: 'account', label: 'Account', icon: UserRound },
@@ -144,7 +145,7 @@ function ControlGrid({ items }: { items: ControlCard[] }) {
 
 export function SettingsPage() {
   const { user, logout } = useAuth();
-  const [tab, setTab] = useState<TabId>('cafe');
+  const [tab, setTab] = useState<TabId>('account');
   const [compactSidebar, setCompactSidebar] = useState(readCollapsed);
   const features = Object.entries(user?.features || {});
 
@@ -222,6 +223,8 @@ export function SettingsPage() {
               </dd>
             </div>
           </dl>
+          <AccountCredentialsForm />
+
           {features.length > 0 && (
             <div className="mt-6 border-t border-[var(--border)] pt-5">
               <h2 className="section-title">Server features</h2>

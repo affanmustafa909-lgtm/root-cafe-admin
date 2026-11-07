@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
+  CheckCircle2,
+  ChefHat,
   CircleCheck,
   Clock3,
-  Filter,
+  Inbox,
+  PackageCheck,
   RefreshCw,
   ShoppingBag,
   TrendingUp,
   Users,
   Wallet,
+  XCircle,
 } from 'lucide-react';
 import { api, dataOf } from '@/shared/api/client';
 import type { Order, OrderStatus } from '@/shared/types';
@@ -27,7 +31,6 @@ import {
 import {
   AnimatedNumber,
   AreaChart,
-  DonutChart,
   HorizontalBars,
   Sparkline,
 } from '@/shared/ui/charts';
@@ -57,12 +60,45 @@ const statuses: OrderStatus[] = [
   'DECLINED',
 ];
 
-const statusColors: Record<OrderStatus, string> = {
-  RECEIVED: '#6BA3D4',
-  PREPARING: '#162947',
-  READY_FOR_PICKUP: '#E02A3A',
-  COMPLETED: '#94A3B8',
-  DECLINED: '#F87171',
+const statusMeta: Record<
+  OrderStatus,
+  {
+    label: string;
+    icon: typeof Inbox;
+    well: string;
+    bar: string;
+  }
+> = {
+  RECEIVED: {
+    label: 'Received',
+    icon: Inbox,
+    well: 'icon-well-sky',
+    bar: 'bg-sky-400',
+  },
+  PREPARING: {
+    label: 'Preparing',
+    icon: ChefHat,
+    well: 'icon-well-primary',
+    bar: 'bg-[var(--primary)]',
+  },
+  READY_FOR_PICKUP: {
+    label: 'Ready',
+    icon: PackageCheck,
+    well: 'icon-well-green',
+    bar: 'bg-[var(--success)]',
+  },
+  COMPLETED: {
+    label: 'Completed',
+    icon: CheckCircle2,
+    well: 'icon-well-stone',
+    bar: 'bg-stone-400',
+  },
+  DECLINED: {
+    label: 'Declined',
+    icon: XCircle,
+    well: 'icon-well-amber',
+    bar: 'bg-[var(--destructive)]',
+  },
 };
 
 function todayIso() {
@@ -147,15 +183,24 @@ function formatPeriodLabel(mode: PeriodMode, date: string, month: string) {
   }).format(new Date(y, m - 1, d));
 }
 
+function relativeTime(v?: string) {
+  if (!v) return '—';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return '—';
+  const mins = Math.round((Date.now() - d.getTime()) / 60_000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return dateTime(v);
+}
+
 export function DashboardPage() {
   const { user } = useAuth();
-  const qc = useQueryClient();
   const [liveFlash, setLiveFlash] = useState<string | null>(null);
-  const [filterOpen, setFilterOpen] = useState(false);
   const [mode, setMode] = useState<PeriodMode>('day');
   const [date, setDate] = useState(todayIso);
   const [month, setMonth] = useState(monthIso);
-  const filterRef = useRef<HTMLDivElement>(null);
 
   const queryParams = mode === 'month' ? { month } : { date };
 
@@ -173,30 +218,11 @@ export function DashboardPage() {
   });
 
   const onLive = useCallback(() => {
-    void qc.invalidateQueries({ queryKey: ['dashboard'] });
     setLiveFlash('Updated');
     window.setTimeout(() => setLiveFlash(null), 2500);
-  }, [qc]);
+  }, []);
 
   const { connected } = useSocket(onLive);
-
-  useEffect(() => {
-    if (!filterOpen) return;
-    const onPointer = (e: MouseEvent) => {
-      if (!filterRef.current?.contains(e.target as Node)) {
-        setFilterOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setFilterOpen(false);
-    };
-    document.addEventListener('mousedown', onPointer);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onPointer);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [filterOpen]);
 
   const activity = useMemo(
     () => hourBuckets(q.data?.recentOrders ?? []),
@@ -212,21 +238,20 @@ export function DashboardPage() {
   const periodLabel = formatPeriodLabel(mode, date, month);
   const isToday = mode === 'day' && date === todayIso();
   const isThisMonth = mode === 'month' && month === monthIso();
-  const filterActive = !isToday && !(mode === 'month' && isThisMonth);
 
   if (q.isLoading) {
     return (
       <div className="page-enter space-y-5">
-        <Skeleton className="h-12 w-72" />
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
-          <Skeleton className="h-32" />
+        <Skeleton className="h-16 w-full max-w-xl" />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
+          <Skeleton className="h-28" />
         </div>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Skeleton className="h-72" />
-          <Skeleton className="h-72" />
+        <div className="grid gap-4 lg:grid-cols-12">
+          <Skeleton className="h-64 lg:col-span-7" />
+          <Skeleton className="h-64 lg:col-span-5" />
         </div>
       </div>
     );
@@ -244,7 +269,10 @@ export function DashboardPage() {
 
   const d = q.data!;
   const totalOrders = statuses.reduce((sum, s) => sum + (d.counts?.[s] ?? 0), 0);
-  const pending = (d.counts?.RECEIVED ?? 0) + (d.counts?.PREPARING ?? 0);
+  const pending =
+    (d.counts?.RECEIVED ?? 0) +
+    (d.counts?.PREPARING ?? 0) +
+    (d.counts?.READY_FOR_PICKUP ?? 0);
   const completed = d.counts?.COMPLETED ?? 0;
   const revenue = Number(d.todayRevenue ?? 0);
   const aov = totalOrders > 0 && revenue ? revenue / totalOrders : 0;
@@ -253,13 +281,6 @@ export function DashboardPage() {
       .map((o) => o.customer?.id || o.customer?.email || o.customer?.name)
       .filter(Boolean),
   ).size;
-
-  const statusSlices = statuses.map((s) => ({
-    key: s,
-    label: titleCase(s),
-    value: d.counts?.[s] ?? 0,
-    color: statusColors[s],
-  }));
 
   const sparkValues = activity.map((b) => b.value);
   const firstName = user?.name?.split(' ')[0] || 'team';
@@ -272,135 +293,108 @@ export function DashboardPage() {
       : isToday
         ? 'Today'
         : periodLabel;
+  const peakValue = hasChartData
+    ? Math.max(...activity.map((b) => b.value))
+    : 0;
+  const maxStatus = Math.max(
+    1,
+    ...statuses.map((s) => d.counts?.[s] ?? 0),
+  );
 
   return (
     <div className="page-enter space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold tracking-wider text-[var(--muted-foreground)] uppercase">
-            {periodLabel}
-          </p>
-          <h1 className="font-display mt-1 text-[1.85rem] font-semibold tracking-tight text-[var(--foreground)]">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs font-semibold tracking-wider text-[var(--muted-foreground)] uppercase">
+              Overview
+            </p>
+            <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-[11px] font-medium text-[var(--muted-foreground)] shadow-[var(--shadow-xs)]">
+              <span
+                className={
+                  connected
+                    ? 'live-dot'
+                    : 'size-1.5 rounded-full bg-[var(--muted-foreground)]'
+                }
+              />
+              {connected ? 'Live' : 'Offline'}
+              {liveFlash && (
+                <span className="anim-fade-in text-[var(--foreground)]">
+                  · {liveFlash}
+                </span>
+              )}
+            </span>
+          </div>
+          <h1 className="font-display mt-1.5 text-[1.85rem] font-semibold tracking-tight text-[var(--foreground)]">
             {greeting()}, {firstName}
           </h1>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-            {mode === 'month'
-              ? `Café activity for ${periodLabel}`
-              : isToday
-                ? 'Today’s café activity at a glance'
-                : `Café activity for ${periodLabel}`}
+            {scopeHint} café snapshot · {totalOrders} order
+            {totalOrders === 1 ? '' : 's'}
+            {pending > 0 ? ` · ${pending} active in kitchen` : ''}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] shadow-[var(--shadow-xs)]">
-            <span
-              className={
-                connected
-                  ? 'live-dot'
-                  : 'size-1.5 rounded-full bg-[var(--muted-foreground)]'
-              }
-            />
-            {connected ? 'Live' : 'Offline'}
-            {liveFlash && (
-              <span className="anim-fade-in text-[var(--foreground)]">
-                · {liveFlash}
-              </span>
-            )}
-          </span>
 
-          <div className="relative" ref={filterRef}>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <div className="flex gap-1 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-[var(--shadow-xs)]">
+            <button
+              type="button"
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                mode === 'day'
+                  ? 'bg-[var(--foreground)] text-[var(--card)]'
+                  : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
+              }`}
+              onClick={() => setMode('day')}
+            >
+              Day
+            </button>
+            <button
+              type="button"
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                mode === 'month'
+                  ? 'bg-[var(--foreground)] text-[var(--card)]'
+                  : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
+              }`}
+              onClick={() => setMode('month')}
+            >
+              Month
+            </button>
+          </div>
+
+          {mode === 'month' ? (
+            <Input
+              type="month"
+              value={month}
+              max={monthIso()}
+              onChange={(e) => setMonth(e.target.value)}
+              aria-label="Filter month"
+              className="h-9 w-full border-[var(--border)] bg-[var(--card)] sm:w-[11.5rem]"
+            />
+          ) : (
+            <Input
+              type="date"
+              value={date}
+              max={todayIso()}
+              onChange={(e) => setDate(e.target.value)}
+              aria-label="Filter date"
+              className="h-9 w-full border-[var(--border)] bg-[var(--card)] sm:w-[11.5rem]"
+            />
+          )}
+
+          {!isToday && !(mode === 'month' && isThisMonth) ? (
             <Button
               type="button"
-              variant={filterActive ? 'primary' : 'secondary'}
+              variant="ghost"
               size="sm"
-              onClick={() => setFilterOpen((o) => !o)}
-              aria-expanded={filterOpen}
-              aria-haspopup="dialog"
-              aria-label="Filter by date or month"
-              title="Filter period"
+              onClick={() => {
+                setMode('day');
+                setDate(todayIso());
+                setMonth(monthIso());
+              }}
             >
-              <Filter size={14} aria-hidden />
-              Filter
+              Reset
             </Button>
-            {filterOpen && (
-              <div
-                role="dialog"
-                aria-label="Dashboard period filter"
-                className="absolute top-full right-0 z-30 mt-2 w-[17.5rem] rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-[var(--shadow-md)]"
-              >
-                <div className="flex gap-1 rounded-lg bg-[var(--muted)] p-1">
-                  <button
-                    type="button"
-                    className={`flex-1 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors ${
-                      mode === 'day'
-                        ? 'bg-[var(--card)] text-[var(--foreground)] shadow-[var(--shadow-xs)]'
-                        : 'text-[var(--muted-foreground)]'
-                    }`}
-                    onClick={() => setMode('day')}
-                  >
-                    Day
-                  </button>
-                  <button
-                    type="button"
-                    className={`flex-1 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors ${
-                      mode === 'month'
-                        ? 'bg-[var(--card)] text-[var(--foreground)] shadow-[var(--shadow-xs)]'
-                        : 'text-[var(--muted-foreground)]'
-                    }`}
-                    onClick={() => setMode('month')}
-                  >
-                    Month
-                  </button>
-                </div>
-
-                <label className="mt-3 block">
-                  <span className="mb-1.5 block text-xs font-medium text-[var(--muted-foreground)]">
-                    {mode === 'month' ? 'Select month' : 'Select date'}
-                  </span>
-                  {mode === 'month' ? (
-                    <Input
-                      type="month"
-                      value={month}
-                      max={monthIso()}
-                      onChange={(e) => setMonth(e.target.value)}
-                      aria-label="Filter month"
-                    />
-                  ) : (
-                    <Input
-                      type="date"
-                      value={date}
-                      max={todayIso()}
-                      onChange={(e) => setDate(e.target.value)}
-                      aria-label="Filter date"
-                    />
-                  )}
-                </label>
-
-                <div className="mt-3 flex items-center justify-between gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setMode('day');
-                      setDate(todayIso());
-                      setMonth(monthIso());
-                      setFilterOpen(false);
-                    }}
-                  >
-                    Today
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => setFilterOpen(false)}
-                  >
-                    Apply
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
+          ) : null}
 
           <Button
             variant="secondary"
@@ -413,6 +407,31 @@ export function DashboardPage() {
           </Button>
         </div>
       </div>
+
+      {pending > 0 && isToday ? (
+        <Link
+          to="/orders"
+          className="card-interactive flex items-center justify-between gap-4 px-4 py-3.5 no-underline"
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="icon-well icon-well-primary size-10">
+              <ChefHat size={18} aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[var(--foreground)]">
+                {pending} order{pending === 1 ? '' : 's'} need attention
+              </p>
+              <p className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                Open the kitchen board to advance tickets
+              </p>
+            </div>
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-[var(--primary)]">
+            Open board
+            <ArrowRight size={14} aria-hidden />
+          </span>
+        </Link>
+      ) : null}
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {showReporting ? (
@@ -430,7 +449,7 @@ export function DashboardPage() {
             <MetricCard
               label="Orders"
               value={<AnimatedNumber value={totalOrders} />}
-              hint={`${pending} in progress`}
+              hint={`${pending} active`}
               icon={ShoppingBag}
               accent="teal"
               delay={40}
@@ -458,7 +477,7 @@ export function DashboardPage() {
             <MetricCard
               label="Orders"
               value={<AnimatedNumber value={totalOrders} />}
-              hint={`${pending} in progress`}
+              hint={`${pending} active`}
               icon={ShoppingBag}
               accent="teal"
               spark={<Sparkline values={sparkValues} />}
@@ -466,7 +485,7 @@ export function DashboardPage() {
             <MetricCard
               label="Pending"
               value={<AnimatedNumber value={pending} />}
-              hint="Received + preparing"
+              hint="In the kitchen"
               icon={Clock3}
               accent="amber"
               delay={40}
@@ -492,79 +511,37 @@ export function DashboardPage() {
       </section>
 
       <div className="grid gap-4 lg:grid-cols-12">
-        <section className="card flex flex-col p-5 sm:p-6 lg:col-span-4">
-          <div className="mb-5">
-            <h2 className="text-sm font-semibold text-[var(--foreground)]">
-              Kitchen pipeline
-            </h2>
-            <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
-              {totalOrders} order{totalOrders === 1 ? '' : 's'} · {scopeHint}
-            </p>
-          </div>
-
-          <DonutChart
-            slices={statusSlices}
-            size={168}
-            thickness={20}
-            center={
-              <>
-                <p className="font-display text-3xl font-semibold tabular-nums text-[var(--foreground)]">
-                  {totalOrders}
-                </p>
-                <p className="text-[11px] text-[var(--muted-foreground)]">
-                  total
-                </p>
-              </>
-            }
-          />
-
-          <ul className="mt-5 flex-1 space-y-1">
-            {statusSlices.map((slice) => (
-              <li
-                key={slice.key}
-                className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 text-sm hover:bg-[var(--muted)]/60"
-              >
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <span
-                    className="size-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: slice.color }}
-                    aria-hidden
-                  />
-                  <span className="truncate text-[var(--foreground)]">
-                    {slice.label}
-                  </span>
-                </span>
-                <span className="font-semibold tabular-nums text-[var(--foreground)]">
-                  {slice.value}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="card flex flex-col p-5 sm:p-6 lg:col-span-8">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+        <section className="card flex flex-col p-5 sm:p-6 lg:col-span-7">
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 className="text-sm font-semibold text-[var(--foreground)]">
+              <p className="section-title">Volume</p>
+              <h2 className="mt-1 text-base font-semibold text-[var(--foreground)]">
                 Orders by hour
               </h2>
               <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
-                Volume across the service window · {scopeHint}
+                Service window · {scopeHint}
               </p>
             </div>
-            {hasChartData && (
-              <p className="text-xs tabular-nums text-[var(--muted-foreground)]">
-                Peak{' '}
-                <span className="font-semibold text-[var(--foreground)]">
-                  {Math.max(...activity.map((b) => b.value))}
-                </span>
-              </p>
-            )}
+            {hasChartData ? (
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--muted)]/50 px-3 py-2 text-right">
+                <p className="text-[11px] text-[var(--muted-foreground)]">
+                  Peak hour
+                </p>
+                <p className="text-sm font-semibold tabular-nums text-[var(--foreground)]">
+                  {peakValue} order{peakValue === 1 ? '' : 's'}
+                </p>
+              </div>
+            ) : null}
           </div>
 
           {!hasChartData ? (
-            <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted)]/40 py-16 text-sm text-[var(--muted-foreground)]">
-              Orders will appear here for this period
+            <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted)]/35 px-4 py-16 text-center">
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                No order volume yet
+              </p>
+              <p className="mt-1 max-w-xs text-sm text-[var(--muted-foreground)]">
+                Activity for this period will show here as orders come in.
+              </p>
             </div>
           ) : (
             <div className="mt-auto">
@@ -572,22 +549,73 @@ export function DashboardPage() {
             </div>
           )}
         </section>
+
+        <section className="card flex flex-col p-5 sm:p-6 lg:col-span-5">
+          <div className="mb-5">
+            <p className="section-title">Pipeline</p>
+            <h2 className="mt-1 text-base font-semibold text-[var(--foreground)]">
+              Order status
+            </h2>
+            <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
+              {totalOrders} total · {scopeHint}
+            </p>
+          </div>
+
+          <ul className="flex flex-1 flex-col gap-3">
+            {statuses.map((status) => {
+              const meta = statusMeta[status];
+              const Icon = meta.icon;
+              const value = d.counts?.[status] ?? 0;
+              const pct = Math.round((value / maxStatus) * 100);
+
+              return (
+                <li key={status}>
+                  <div className="mb-1.5 flex items-center justify-between gap-3">
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <span className={`icon-well size-7 ${meta.well}`}>
+                        <Icon size={13} aria-hidden />
+                      </span>
+                      <span className="truncate text-sm font-medium text-[var(--foreground)]">
+                        {meta.label}
+                      </span>
+                    </span>
+                    <span className="text-sm font-semibold tabular-nums text-[var(--foreground)]">
+                      {value}
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]">
+                    <div
+                      className={`h-full rounded-full ${meta.bar} transition-[width] duration-500`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-12">
         <section className="card p-5 sm:p-6 lg:col-span-4">
           <div className="mb-5">
-            <h2 className="text-sm font-semibold text-[var(--foreground)]">
-              Popular
+            <p className="section-title">Bestsellers</p>
+            <h2 className="mt-1 text-base font-semibold text-[var(--foreground)]">
+              Popular items
             </h2>
             <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
-              Top items · {scopeHint}
+              Top sellers · {scopeHint}
             </p>
           </div>
           {!popular.length ? (
-            <p className="py-10 text-center text-sm text-[var(--muted-foreground)]">
-              Rankings appear once orders include items.
-            </p>
+            <div className="flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] bg-[var(--muted)]/35 px-4 py-10 text-center">
+              <p className="text-sm font-medium text-[var(--foreground)]">
+                No item rankings yet
+              </p>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                Rankings appear once orders include items.
+              </p>
+            </div>
           ) : (
             <HorizontalBars items={popular} />
           )}
@@ -596,16 +624,17 @@ export function DashboardPage() {
         <section className="card overflow-hidden lg:col-span-8">
           <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-4 sm:px-6">
             <div>
-              <h2 className="text-sm font-semibold text-[var(--foreground)]">
+              <p className="section-title">Live feed</p>
+              <h2 className="mt-1 text-base font-semibold text-[var(--foreground)]">
                 Recent orders
               </h2>
               <p className="mt-0.5 text-sm text-[var(--muted-foreground)]">
-                {scopeHint}
+                Latest activity · {scopeHint}
               </p>
             </div>
             <Link
               to="/orders"
-              className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)] focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-semibold text-[var(--primary)] hover:bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] hover:text-[var(--primary-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
             >
               View all
               <ArrowRight size={14} aria-hidden />
@@ -613,65 +642,51 @@ export function DashboardPage() {
           </div>
 
           {!d.recentOrders?.length ? (
-            <div className="flex min-h-40 flex-col items-center justify-center px-6 py-12 text-center">
+            <div className="flex min-h-48 flex-col items-center justify-center px-6 py-12 text-center">
               <p className="text-sm font-medium text-[var(--foreground)]">
                 No orders in this period
               </p>
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
-                Try another date or month from Filter.
+                Try another day or month above.
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Order</th>
-                    <th>Customer</th>
-                    <th>Items</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.recentOrders.map((o: Order) => (
-                    <tr key={o.id}>
-                      <td>
-                        <Link
-                          className="font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)] focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
-                          to={`/orders/${o.id}`}
-                        >
+            <div className="divide-y divide-[var(--border)]">
+              {d.recentOrders.slice(0, 8).map((o: Order) => {
+                const count =
+                  o.items?.reduce((n, i) => n + i.quantity, 0) || 0;
+                return (
+                  <Link
+                    key={o.id}
+                    to={`/orders/${o.id}`}
+                    className="flex items-center gap-3 px-5 py-3.5 no-underline transition-colors hover:bg-[var(--muted)]/45 sm:px-6"
+                  >
+                    <Avatar name={o.customer?.name || 'Guest'} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <p className="text-sm font-semibold text-[var(--foreground)]">
                           #{o.orderNumber}
-                        </Link>
-                      </td>
-                      <td>
-                        <span className="inline-flex items-center gap-2.5">
-                          <Avatar
-                            name={o.customer?.name || 'Guest'}
-                            size="sm"
-                          />
-                          <span>{o.customer?.name || 'Guest'}</span>
-                        </span>
-                      </td>
-                      <td className="tabular-nums text-[var(--muted-foreground)]">
-                        {o.items?.reduce((n, i) => n + i.quantity, 0) || 0}
-                      </td>
-                      <td className="font-semibold tabular-nums">
-                        {money(o.total)}
-                      </td>
-                      <td>
+                        </p>
                         <Badge tone={orderStatusTone(o.status)}>
                           {titleCase(o.status)}
                         </Badge>
-                      </td>
-                      <td className="whitespace-nowrap text-[var(--muted-foreground)]">
-                        {dateTime(o.createdAt)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                      <p className="mt-0.5 truncate text-xs text-[var(--muted-foreground)]">
+                        {o.customer?.name || 'Guest'}
+                        <span className="mx-1 opacity-40">·</span>
+                        {count} {count === 1 ? 'item' : 'items'}
+                        <span className="mx-1 opacity-40">·</span>
+                        <span title={dateTime(o.createdAt)}>
+                          {relativeTime(o.createdAt)}
+                        </span>
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-sm font-semibold tabular-nums text-[var(--foreground)]">
+                      {money(o.total)}
+                    </p>
+                  </Link>
+                );
+              })}
             </div>
           )}
         </section>

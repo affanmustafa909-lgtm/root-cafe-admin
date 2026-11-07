@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import {
   ChartNoAxesCombined,
   ClipboardList,
@@ -204,6 +204,14 @@ export function LoginPage() {
                 At least 6 characters
               </small>
             )}
+            <div className="mt-2 flex justify-end">
+              <Link
+                to="/forgot-password"
+                className="text-xs font-semibold text-[var(--primary)] hover:text-[var(--primary-hover)] hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
           </label>
           <Button type="submit" className="mt-6 w-full" size="lg" loading={isSubmitting}>
             {isSubmitting ? 'Signing in…' : 'Sign in'}

@@ -13,7 +13,7 @@ npm run dev
 
 Admin: `http://localhost:5173`
 
-Set `VITE_API_URL` to the NestJS API (default `http://localhost:3000`).
+Set `VITE_API_URL` to the NestJS API (live default `https://backend-root-cafe-main-production.up.railway.app`).
 
 ## Scripts
 

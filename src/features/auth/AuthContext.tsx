@@ -14,6 +14,8 @@ type AuthValue = {
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  applySession: (token: string | undefined, user: User) => void;
+  refreshUser: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthValue | null>(null);
@@ -75,9 +77,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const applySession = (nextToken: string | undefined, nextUser: User) => {
+    if (nextToken) {
+      setToken(nextToken);
+      setTokenState(nextToken);
+    }
+    setUser(nextUser);
+    setLoading(false);
+  };
+
+  const refreshUser = async () => {
+    const next = dataOf<User>(await api.get('/auth/me'));
+    setUser(next);
+  };
+
   return (
     <AuthContext.Provider
-      value={{ user, token: tokenState, loading, login, logout }}
+      value={{
+        user,
+        token: tokenState,
+        loading,
+        login,
+        logout,
+        applySession,
+        refreshUser,
+      }}
     >
       {children}
     </AuthContext.Provider>
